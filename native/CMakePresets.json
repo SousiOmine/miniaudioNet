@@ -38,107 +38,88 @@
       }
     },
     {
+      "name": "linux",
+      "hidden": true,
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      }
+    },
+    {
       "name": "linux-x64",
       "displayName": "Linux x64",
-      "generator": "Ninja",
+      "inherits": "linux",
       "binaryDir": "${sourceDir}/../build/native/linux-x64",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_INSTALL_PREFIX": "${sourceDir}/../artifacts/native/linux-x64"
       },
       "condition": {
-        "type": "and",
-        "conditions": [
-          {
-            "type": "equals",
-            "lhs": "${hostSystemName}",
-            "rhs": "Linux"
-          },
-          {
-            "type": "equals",
-            "lhs": "${hostSystemProcessor}",
-            "rhs": "x86_64"
-          }
-        ]
+        "type": "equals",
+        "lhs": "${hostSystemProcessor}",
+        "rhs": "x86_64"
       }
     },
     {
       "name": "linux-arm64",
       "displayName": "Linux ARM64",
-      "generator": "Ninja",
+      "inherits": "linux",
       "binaryDir": "${sourceDir}/../build/native/linux-arm64",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_INSTALL_PREFIX": "${sourceDir}/../artifacts/native/linux-arm64"
       },
       "condition": {
-        "type": "and",
-        "conditions": [
-          {
-            "type": "equals",
-            "lhs": "${hostSystemName}",
-            "rhs": "Linux"
-          },
-          {
-            "type": "equals",
-            "lhs": "${hostSystemProcessor}",
-            "rhs": "aarch64"
-          }
-        ]
+        "type": "equals",
+        "lhs": "${hostSystemProcessor}",
+        "rhs": "aarch64"
+      }
+    },
+    {
+      "name": "macos",
+      "hidden": true,
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_OSX_DEPLOYMENT_TARGET": "11.0"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Darwin"
       }
     },
     {
       "name": "macos-x64",
       "displayName": "macOS x64",
-      "generator": "Ninja",
+      "inherits": "macos",
       "binaryDir": "${sourceDir}/../build/native/macos-x64",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_INSTALL_PREFIX": "${sourceDir}/../artifacts/native/osx-x64",
-        "CMAKE_OSX_ARCHITECTURES": "x86_64",
-        "CMAKE_OSX_DEPLOYMENT_TARGET": "11.0"
+        "CMAKE_OSX_ARCHITECTURES": "x86_64"
       },
       "condition": {
-        "type": "and",
-        "conditions": [
-          {
-            "type": "equals",
-            "lhs": "${hostSystemName}",
-            "rhs": "Darwin"
-          },
-          {
-            "type": "equals",
-            "lhs": "${hostSystemProcessor}",
-            "rhs": "x86_64"
-          }
-        ]
+        "type": "equals",
+        "lhs": "${hostSystemProcessor}",
+        "rhs": "x86_64"
       }
     },
     {
       "name": "macos-arm64",
       "displayName": "macOS ARM64",
-      "generator": "Ninja",
+      "inherits": "macos",
       "binaryDir": "${sourceDir}/../build/native/macos-arm64",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_INSTALL_PREFIX": "${sourceDir}/../artifacts/native/osx-arm64",
-        "CMAKE_OSX_ARCHITECTURES": "arm64",
-        "CMAKE_OSX_DEPLOYMENT_TARGET": "11.0"
+        "CMAKE_OSX_ARCHITECTURES": "arm64"
       },
       "condition": {
-        "type": "and",
-        "conditions": [
-          {
-            "type": "equals",
-            "lhs": "${hostSystemName}",
-            "rhs": "Darwin"
-          },
-          {
-            "type": "equals",
-            "lhs": "${hostSystemProcessor}",
-            "rhs": "arm64"
-          }
-        ]
+        "type": "equals",
+        "lhs": "${hostSystemProcessor}",
+        "rhs": "arm64"
       }
     }
   ],
