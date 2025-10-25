@@ -20,9 +20,9 @@
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
-    <PackageOutputPath>$(RepositoryRoot)artifacts$(DirectorySeparatorChar)packages</PackageOutputPath>
+    <PackageOutputPath>$(RepositoryRoot)artifacts/packages</PackageOutputPath>
     <RuntimeIdentifiers>win-x64;win-arm64;linux-x64;linux-arm64;osx-x64;osx-arm64</RuntimeIdentifiers>
-    <NativeArtifactsRoot Condition="'$(NativeArtifactsRoot)' == ''">$(RepositoryRoot)artifacts$(DirectorySeparatorChar)native</NativeArtifactsRoot>
+    <NativeArtifactsRoot Condition="'$(NativeArtifactsRoot)' == ''">$(RepositoryRoot)artifacts/native</NativeArtifactsRoot>
   </PropertyGroup>
 
   <ItemGroup>
