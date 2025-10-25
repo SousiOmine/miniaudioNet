@@ -20,6 +20,7 @@ miniaudioNet/
 - CMake 3.21 以上
 - C/C++ コンパイラ (MSVC, clang, gcc など)
 - .NET SDK 8.0 以上
+- PowerShell 7
 
 ## ネイティブバイナリの取得
 

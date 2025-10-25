@@ -42,12 +42,17 @@ internal static partial class NativeMethods
 
     internal static SoundHandle SoundCreateFromFile(EngineHandle engine, string path, uint flags)
     {
-        var handle = SoundCreateFromFileCore(engine, path, flags);
+        var handle = OperatingSystem.IsWindows()
+            ? SoundCreateFromFileWCore(engine, path, flags)
+            : SoundCreateFromFileCore(engine, path, flags);
         return SoundHandle.FromIntPtr(handle);
     }
 
     [LibraryImport(LibraryName, EntryPoint = "manet_sound_create_from_file", StringMarshalling = StringMarshalling.Utf8)]
     private static partial IntPtr SoundCreateFromFileCore(EngineHandle engine, string path, uint flags);
+
+    [LibraryImport(LibraryName, EntryPoint = "manet_sound_create_from_file_w", StringMarshalling = StringMarshalling.Utf16)]
+    private static partial IntPtr SoundCreateFromFileWCore(EngineHandle engine, string path, uint flags);
 
     [LibraryImport(LibraryName, EntryPoint = "manet_sound_destroy")]
     internal static partial void SoundDestroy(IntPtr handle);

@@ -195,6 +195,29 @@ MANET_API manet_sound* manet_sound_create_from_file(manet_engine* engineHandle, 
     return soundHandle;
 }
 
+#if defined(_WIN32)
+MANET_API manet_sound* manet_sound_create_from_file_w(manet_engine* engineHandle, const wchar_t* path, ma_uint32 flags)
+{
+    if (manet_validate_engine(engineHandle) != MA_SUCCESS || path == NULL) {
+        return NULL;
+    }
+
+    manet_sound* soundHandle = (manet_sound*)manet_alloc(sizeof(*soundHandle));
+    if (soundHandle == NULL) {
+        return NULL;
+    }
+
+    ma_result result = ma_sound_init_from_file_w(&engineHandle->engine, path, flags, NULL, NULL, &soundHandle->sound);
+    if (result != MA_SUCCESS) {
+        manet_free(soundHandle);
+        return NULL;
+    }
+
+    soundHandle->state = MANET_SOUND_STATE_STOPPED;
+    return soundHandle;
+}
+#endif
+
 MANET_API void manet_sound_destroy(manet_sound* handle)
 {
     if (handle == NULL) {
