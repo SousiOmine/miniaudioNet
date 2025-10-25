@@ -15,8 +15,16 @@ typedef struct manet_engine {
     ma_engine engine;
 } manet_engine;
 
+typedef enum manet_sound_state {
+    MANET_SOUND_STATE_STOPPED = 0,
+    MANET_SOUND_STATE_PLAYING = 1,
+    MANET_SOUND_STATE_STARTING = 2,
+    MANET_SOUND_STATE_STOPPING = 3
+} manet_sound_state;
+
 typedef struct manet_sound {
     ma_sound sound;
+    manet_sound_state state;
 } manet_sound;
 
 static void* manet_alloc(size_t size)
@@ -45,6 +53,33 @@ static ma_result manet_validate_engine(manet_engine* handle)
 static ma_result manet_validate_sound(manet_sound* handle)
 {
     return handle == NULL ? MA_INVALID_OPERATION : MA_SUCCESS;
+}
+
+static manet_sound_state manet_sound_update_state(manet_sound* handle)
+{
+    if (handle == NULL) {
+        return MANET_SOUND_STATE_STOPPED;
+    }
+
+    if (ma_sound_is_playing(&handle->sound)) {
+        handle->state = MANET_SOUND_STATE_PLAYING;
+        return handle->state;
+    }
+
+    if (handle->state == MANET_SOUND_STATE_STARTING) {
+        if (ma_sound_at_end(&handle->sound)) {
+            handle->state = MANET_SOUND_STATE_STOPPED;
+        }
+        return handle->state;
+    }
+
+    if (handle->state == MANET_SOUND_STATE_STOPPING) {
+        handle->state = MANET_SOUND_STATE_STOPPED;
+        return handle->state;
+    }
+
+    handle->state = MANET_SOUND_STATE_STOPPED;
+    return handle->state;
 }
 
 MANET_API manet_engine* manet_engine_create_default(void)
@@ -135,7 +170,8 @@ MANET_API ma_result manet_engine_set_listener_position(manet_engine* handle, ma_
         return MA_INVALID_OPERATION;
     }
 
-    return ma_engine_listener_set_position(&handle->engine, index, x, y, z);
+    ma_engine_listener_set_position(&handle->engine, index, x, y, z);
+    return MA_SUCCESS;
 }
 
 MANET_API manet_sound* manet_sound_create_from_file(manet_engine* engineHandle, const char* path, ma_uint32 flags)
@@ -155,6 +191,7 @@ MANET_API manet_sound* manet_sound_create_from_file(manet_engine* engineHandle, 
         return NULL;
     }
 
+    soundHandle->state = MANET_SOUND_STATE_STOPPED;
     return soundHandle;
 }
 
@@ -174,7 +211,12 @@ MANET_API ma_result manet_sound_start(manet_sound* handle)
         return MA_INVALID_OPERATION;
     }
 
-    return ma_sound_start(&handle->sound);
+    ma_result result = ma_sound_start(&handle->sound);
+    if (result == MA_SUCCESS) {
+        handle->state = MANET_SOUND_STATE_STARTING;
+    }
+
+    return result;
 }
 
 MANET_API ma_result manet_sound_stop(manet_sound* handle)
@@ -183,7 +225,12 @@ MANET_API ma_result manet_sound_stop(manet_sound* handle)
         return MA_INVALID_OPERATION;
     }
 
-    return ma_sound_stop(&handle->sound);
+    ma_result result = ma_sound_stop(&handle->sound);
+    if (result == MA_SUCCESS) {
+        handle->state = MANET_SOUND_STATE_STOPPING;
+    }
+
+    return result;
 }
 
 MANET_API ma_result manet_sound_set_volume(manet_sound* handle, float volume)
@@ -192,7 +239,8 @@ MANET_API ma_result manet_sound_set_volume(manet_sound* handle, float volume)
         return MA_INVALID_OPERATION;
     }
 
-    return ma_sound_set_volume(&handle->sound, volume);
+    ma_sound_set_volume(&handle->sound, volume);
+    return MA_SUCCESS;
 }
 
 MANET_API float manet_sound_get_volume(manet_sound* handle)
@@ -204,13 +252,13 @@ MANET_API float manet_sound_get_volume(manet_sound* handle)
     return ma_sound_get_volume(&handle->sound);
 }
 
-MANET_API ma_sound_state manet_sound_get_state(manet_sound* handle)
+MANET_API manet_sound_state manet_sound_get_state(manet_sound* handle)
 {
     if (manet_validate_sound(handle) != MA_SUCCESS) {
-        return MA_SOUND_STATE_STOPPED;
+        return MANET_SOUND_STATE_STOPPED;
     }
 
-    return ma_sound_get_state(&handle->sound);
+    return manet_sound_update_state(handle);
 }
 
 MANET_API ma_result manet_sound_seek_to_pcm_frame(manet_sound* handle, ma_uint64 frameIndex)
