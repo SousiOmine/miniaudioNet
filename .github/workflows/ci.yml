@@ -33,10 +33,6 @@ jobs:
             preset: linux-x64
             rid: linux-x64
             shell: bash
-          - os: ubuntu-24.04-arm
-            preset: linux-arm64
-            rid: linux-arm64
-            shell: bash
           - os: macos-13
             preset: macos-x64
             rid: osx-x64
