@@ -1,0 +1,59 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <RepositoryUrl>https://github.com/SousiOmine/miniaudioNet</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageProjectUrl>https://github.com/SousiOmine/miniaudioNet</PackageProjectUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageId>Miniaudio.Net</PackageId>
+    <Authors>miniaudioNet contributors</Authors>
+    <Company>miniaudioNet</Company>
+    <Description>Lightweight C# wrapper for the miniaudio single-header audio playback library.</Description>
+    <PackageTags>audio;miniaudio;wrapper;native</PackageTags>
+    <Version>0.1.0</Version>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <PackageOutputPath>$(RepositoryRoot)artifacts$(DirectorySeparatorChar)packages</PackageOutputPath>
+    <RuntimeIdentifiers>win-x64;win-arm64;linux-x64;linux-arm64;osx-x64;osx-arm64</RuntimeIdentifiers>
+    <NativeArtifactsRoot Condition="'$(NativeArtifactsRoot)' == ''">$(RepositoryRoot)artifacts$(DirectorySeparatorChar)native</NativeArtifactsRoot>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="$(RepositoryRoot)README.md">
+      <Link>README.md</Link>
+      <Pack>true</Pack>
+      <PackagePath></PackagePath>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup Condition="Exists('$(NativeArtifactsRoot)')">
+    <NativeBinary Include="$(NativeArtifactsRoot)/**/*.*">
+      <PackageSubPath>$([System.String]::Copy('%(RecursiveDir)').Replace('\','/'))</PackageSubPath>
+    </NativeBinary>
+  </ItemGroup>
+
+  <ItemGroup Condition="'@(NativeBinary)' != ''">
+    <None Include="@(NativeBinary)">
+      <Pack>true</Pack>
+      <PackagePath>runtimes/%(NativeBinary.PackageSubPath)</PackagePath>
+      <Visible>false</Visible>
+    </None>
+  </ItemGroup>
+
+  <Target Name="CopyNativeBinaries"
+          Condition="'@(NativeBinary)' != ''"
+          AfterTargets="Build">
+    <Message Importance="High" Text="Copying prebuilt native libraries to $(OutDir)..." />
+    <Copy SourceFiles="@(NativeBinary)"
+          DestinationFiles="@(NativeBinary->'$(OutDir)$([System.String]::Copy('%(NativeBinary.PackageSubPath)').Replace('/', '$(DirectorySeparatorChar)'))%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+</Project>
