@@ -33,6 +33,83 @@ public sealed class MiniaudioSound : IDisposable
         }
     }
 
+    public float Pitch
+    {
+        get
+        {
+            ThrowIfDisposed();
+            return NativeMethods.SoundGetPitch(_handle!);
+        }
+        set
+        {
+            ThrowIfDisposed();
+            if (value <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(value), "Pitch must be greater than 0.");
+            }
+
+            NativeMethods.SoundSetPitch(_handle!, value).EnsureSuccess(nameof(Pitch));
+        }
+    }
+
+    public float Pan
+    {
+        get
+        {
+            ThrowIfDisposed();
+            return NativeMethods.SoundGetPan(_handle!);
+        }
+        set
+        {
+            ThrowIfDisposed();
+            NativeMethods.SoundSetPan(_handle!, value).EnsureSuccess(nameof(Pan));
+        }
+    }
+
+    public (float X, float Y, float Z) Position
+    {
+        get
+        {
+            ThrowIfDisposed();
+            NativeMethods.SoundGetPosition(_handle!, out var x, out var y, out var z).EnsureSuccess(nameof(Position));
+            return (x, y, z);
+        }
+        set
+        {
+            ThrowIfDisposed();
+            NativeMethods.SoundSetPosition(_handle!, value.X, value.Y, value.Z).EnsureSuccess(nameof(Position));
+        }
+    }
+
+    public (float X, float Y, float Z) Direction
+    {
+        get
+        {
+            ThrowIfDisposed();
+            NativeMethods.SoundGetDirection(_handle!, out var x, out var y, out var z).EnsureSuccess(nameof(Direction));
+            return (x, y, z);
+        }
+        set
+        {
+            ThrowIfDisposed();
+            NativeMethods.SoundSetDirection(_handle!, value.X, value.Y, value.Z).EnsureSuccess(nameof(Direction));
+        }
+    }
+
+    public SoundPositioning Positioning
+    {
+        get
+        {
+            ThrowIfDisposed();
+            return NativeMethods.SoundGetPositioning(_handle!);
+        }
+        set
+        {
+            ThrowIfDisposed();
+            NativeMethods.SoundSetPositioning(_handle!, value).EnsureSuccess(nameof(Positioning));
+        }
+    }
+
     public SoundState State
     {
         get

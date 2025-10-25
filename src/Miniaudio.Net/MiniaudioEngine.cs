@@ -69,6 +69,40 @@ public sealed class MiniaudioEngine : IDisposable
         return new MiniaudioSound(this, soundHandle, filePath);
     }
 
+    public MiniaudioSound CreateSoundFromPcmFrames(ReadOnlySpan<float> interleavedFrames, uint channels, uint sampleRate, SoundInitFlags flags = SoundInitFlags.None)
+    {
+        ThrowIfDisposed();
+
+        if (channels == 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(channels), "Channel count must be greater than 0.");
+        }
+
+        if (sampleRate == 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(sampleRate), "Sample rate must be greater than 0.");
+        }
+
+        if (interleavedFrames.IsEmpty)
+        {
+            throw new ArgumentException("PCM data cannot be empty.", nameof(interleavedFrames));
+        }
+
+        if (interleavedFrames.Length % channels != 0)
+        {
+            throw new ArgumentException("PCM data length must be divisible by the number of channels.", nameof(interleavedFrames));
+        }
+
+        var frameCount = (ulong)(interleavedFrames.Length / channels);
+        var soundHandle = NativeMethods.SoundCreateFromPcmFrames(_handle!, interleavedFrames, frameCount, channels, sampleRate, (uint)flags);
+        if (soundHandle is null || soundHandle.IsInvalid)
+        {
+            throw new InvalidOperationException("Failed to create sound from PCM frames. Ensure that the native library was built with PCM buffer support.");
+        }
+
+        return new MiniaudioSound(this, soundHandle, "pcm:memory");
+    }
+
     public void Play(string filePath)
     {
         ThrowIfDisposed();

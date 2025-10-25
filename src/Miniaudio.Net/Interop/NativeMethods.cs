@@ -1,5 +1,6 @@
 using System;
 using System.Runtime.InteropServices;
+using Miniaudio.Net;
 
 namespace Miniaudio.Net.Interop;
 
@@ -54,6 +55,18 @@ internal static partial class NativeMethods
     [LibraryImport(LibraryName, EntryPoint = "manet_sound_create_from_file_w", StringMarshalling = StringMarshalling.Utf16)]
     private static partial IntPtr SoundCreateFromFileWCore(EngineHandle engine, string path, uint flags);
 
+    internal static unsafe SoundHandle SoundCreateFromPcmFrames(EngineHandle engine, ReadOnlySpan<float> frames, ulong frameCount, uint channels, uint sampleRate, uint flags)
+    {
+        fixed (float* pFrames = frames)
+        {
+            var handle = SoundCreateFromPcmFramesCore(engine, pFrames, frameCount, channels, sampleRate, flags);
+            return SoundHandle.FromIntPtr(handle);
+        }
+    }
+
+    [LibraryImport(LibraryName, EntryPoint = "manet_sound_create_from_pcm_frames")]
+    private static unsafe partial IntPtr SoundCreateFromPcmFramesCore(EngineHandle engine, float* frames, ulong frameCount, uint channels, uint sampleRate, uint flags);
+
     [LibraryImport(LibraryName, EntryPoint = "manet_sound_destroy")]
     internal static partial void SoundDestroy(IntPtr handle);
 
@@ -71,6 +84,36 @@ internal static partial class NativeMethods
 
     [LibraryImport(LibraryName, EntryPoint = "manet_sound_get_state")]
     internal static partial SoundState SoundGetState(SoundHandle handle);
+
+    [LibraryImport(LibraryName, EntryPoint = "manet_sound_set_pitch")]
+    internal static partial int SoundSetPitch(SoundHandle handle, float pitch);
+
+    [LibraryImport(LibraryName, EntryPoint = "manet_sound_get_pitch")]
+    internal static partial float SoundGetPitch(SoundHandle handle);
+
+    [LibraryImport(LibraryName, EntryPoint = "manet_sound_set_pan")]
+    internal static partial int SoundSetPan(SoundHandle handle, float pan);
+
+    [LibraryImport(LibraryName, EntryPoint = "manet_sound_get_pan")]
+    internal static partial float SoundGetPan(SoundHandle handle);
+
+    [LibraryImport(LibraryName, EntryPoint = "manet_sound_set_position")]
+    internal static partial int SoundSetPosition(SoundHandle handle, float x, float y, float z);
+
+    [LibraryImport(LibraryName, EntryPoint = "manet_sound_get_position")]
+    internal static partial int SoundGetPosition(SoundHandle handle, out float x, out float y, out float z);
+
+    [LibraryImport(LibraryName, EntryPoint = "manet_sound_set_direction")]
+    internal static partial int SoundSetDirection(SoundHandle handle, float x, float y, float z);
+
+    [LibraryImport(LibraryName, EntryPoint = "manet_sound_get_direction")]
+    internal static partial int SoundGetDirection(SoundHandle handle, out float x, out float y, out float z);
+
+    [LibraryImport(LibraryName, EntryPoint = "manet_sound_set_positioning")]
+    internal static partial int SoundSetPositioning(SoundHandle handle, SoundPositioning positioning);
+
+    [LibraryImport(LibraryName, EntryPoint = "manet_sound_get_positioning")]
+    internal static partial SoundPositioning SoundGetPositioning(SoundHandle handle);
 
     [LibraryImport(LibraryName, EntryPoint = "manet_sound_seek_to_pcm_frame")]
     internal static partial int SoundSeek(SoundHandle handle, ulong frameIndex);

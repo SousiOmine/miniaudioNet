@@ -28,13 +28,30 @@ sound.Start();
 
 大容量ファイルを扱う場合は `SoundInitFlags.Async` を付与することで、バックグラウンドでの読み込みを行いながら再生できます。
 
-## 音量・パン・ループ設定
+## 音量・ピッチ・パン・ループ設定
+
+`MiniaudioSound` は音量だけでなくピッチとパンもプロパティで調整できます。`Pitch` は 0 より大きい値を指定してください。
 
 ```csharp
 sound.Volume = 0.5f;
-sound.Pan = -0.2f; // 左寄り
+sound.Pitch = 1.2f; // 20% 高いピッチ
+sound.Pan = -0.2f;  // 左寄り
 sound.IsLooping = true;
 ```
+
+## 3D ポジショニング
+
+`Position` と `Direction` プロパティで音源の位置と向きを指定できます。`Positioning` を `SoundPositioning.Relative` にするとリスナーに対する相対座標で解釈されます。
+
+```csharp
+sound.Position = (0f, 1.2f, -3f);
+sound.Direction = (0f, 0f, 1f);
+sound.Positioning = SoundPositioning.Relative;
+
+engine.SetListenerPosition(0, 0f, 0f, 0f);
+```
+
+リスナーの移動や複数リスナーを扱いたい場合は `MiniaudioEngine.SetListenerPosition()` を活用してください。
 
 ## 再生状態の監視
 
@@ -61,9 +78,3 @@ engine.WaitForAllSoundsToStop();
 
 - ファイルが見つからない場合やサポート外フォーマットの場合、`MiniaudioException` がスローされます。
 - ネイティブライブラリがロードできない場合は `DllNotFoundException` が発生します。`runtimes/<RID>/native/` の配置や `PATH`/`LD_LIBRARY_PATH` を確認してください。
-
-## 拡張シナリオ
-
-- **エフェクトチェーン**: `ma_node_graph` を活用すればカスタムエフェクトを構築できます (今後のラッパー拡張予定)。
-- **キャプチャ**: `ma_device` を利用した録音 API は将来的に追加予定です。
-- **3D サウンド**: HRTF やリスナー設定をサポートする拡張を検討しています。

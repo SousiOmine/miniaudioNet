@@ -20,6 +20,7 @@ miniaudioNet/
 - CMake 3.21 以上
 - C/C++ コンパイラ (MSVC, clang, gcc など)
 - .NET SDK 8.0 以上
+- PowerShell 7
 
 ## ネイティブバイナリの取得
 
@@ -45,10 +46,10 @@ pwsh ./scripts/build-native.ps1 -Rid win-arm64 # ARM64 版も同じコマンド�
 
 ```powershell
 # ソリューション全体
-pwsh -Command "dotnet build miniaudioNet.sln -c Release"
+dotnet build miniaudioNet.sln -c Release
 
 # パッケージのみを Release で生成
-pwsh -Command "dotnet pack src/Miniaudio.Net/Miniaudio.Net.csproj -c Release"
+dotnet pack src/Miniaudio.Net/Miniaudio.Net.csproj -c Release
 ```
 
 `dotnet pack` は `artifacts/native/**` の内容を自動で取り込み、`artifacts/packages/` に `.nupkg` と `.snupkg` を出力します。生成されたパッケージをローカルフィードに追加すれば、`.NET` プロジェクトへ参照するだけで Windows / macOS / Linux のいずれでも即動作します。
@@ -56,7 +57,7 @@ pwsh -Command "dotnet pack src/Miniaudio.Net/Miniaudio.Net.csproj -c Release"
 サンプルの実行:
 
 ```powershell
-pwsh -Command "dotnet run --project samples/MiniaudioNet.Sample -- <audio-file>"
+dotnet run --project samples/MiniaudioNet.Sample -- <audio-file>
 ```
 
 ## GitHub Actions ワークフロー概要
