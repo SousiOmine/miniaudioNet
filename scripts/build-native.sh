@@ -37,7 +37,6 @@ while [[ $# -gt 0 ]]; do
       exit 1
       ;;
   esac
-  shift
 done
 
 resolve_preset_from_rid() {
@@ -97,6 +96,6 @@ cmake --build --preset "$BUILD_PRESET"
 echo "Installing artifacts for RID '$RID'..."
 cmake --install --preset "$BUILD_PRESET"
 
-echo "Native binaries are available under $(cd "$REPO_ROOT/artifacts/native/$RID" && pwd)"
+echo "Native binaries are available under $REPO_ROOT/artifacts/native/$RID"
 
 popd > /dev/null
