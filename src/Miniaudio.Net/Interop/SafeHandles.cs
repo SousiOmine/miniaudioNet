@@ -3,6 +3,27 @@ using Microsoft.Win32.SafeHandles;
 
 namespace Miniaudio.Net.Interop;
 
+internal sealed class ContextHandle : SafeHandleZeroOrMinusOneIsInvalid
+{
+    private ContextHandle()
+        : base(true)
+    {
+    }
+
+    internal static ContextHandle FromIntPtr(IntPtr handle)
+    {
+        var safeHandle = new ContextHandle();
+        safeHandle.SetHandle(handle);
+        return safeHandle;
+    }
+
+    protected override bool ReleaseHandle()
+    {
+        NativeMethods.ContextDestroy(handle);
+        return true;
+    }
+}
+
 internal sealed class EngineHandle : SafeHandleZeroOrMinusOneIsInvalid
 {
     private EngineHandle()

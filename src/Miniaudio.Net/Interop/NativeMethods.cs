@@ -14,11 +14,72 @@ internal static partial class NativeMethods
         return EngineHandle.FromIntPtr(handle);
     }
 
+    internal static EngineHandle EngineCreateWithOptions(
+        ContextHandle? context,
+        string? playbackDeviceId,
+        uint sampleRate,
+        uint channels,
+        uint periodSizeInFrames,
+        uint periodSizeInMilliseconds,
+        bool noAutoStart,
+        bool noDevice)
+    {
+        var handle = EngineCreateWithOptionsCore(
+            context,
+            playbackDeviceId,
+            sampleRate,
+            channels,
+            periodSizeInFrames,
+            periodSizeInMilliseconds,
+            noAutoStart ? 1 : 0,
+            noDevice ? 1 : 0);
+        return EngineHandle.FromIntPtr(handle);
+    }
+
+    internal static ContextHandle ContextCreateDefault()
+    {
+        var handle = ContextCreateDefaultCore();
+        return ContextHandle.FromIntPtr(handle);
+    }
+
+    internal static ContextHandle ContextCreateWithBackends(int[] backends)
+    {
+        if (backends is null || backends.Length == 0)
+        {
+            throw new ArgumentException("At least one backend must be specified.", nameof(backends));
+        }
+
+        var handle = ContextCreateWithBackendsCore(backends, (uint)backends.Length);
+        return ContextHandle.FromIntPtr(handle);
+    }
+
     [LibraryImport(LibraryName, EntryPoint = "manet_engine_create_default")]
     private static partial IntPtr EngineCreateCore();
 
+    [LibraryImport(LibraryName, EntryPoint = "manet_engine_create_with_options", StringMarshalling = StringMarshalling.Utf8)]
+    private static partial IntPtr EngineCreateWithOptionsCore(
+        ContextHandle? context,
+        string? playbackDeviceId,
+        uint sampleRate,
+        uint channels,
+        uint periodSizeInFrames,
+        uint periodSizeInMilliseconds,
+        int noAutoStart,
+        int noDevice);
+
+    [LibraryImport(LibraryName, EntryPoint = "manet_context_create_default")]
+    private static partial IntPtr ContextCreateDefaultCore();
+
+    [LibraryImport(LibraryName, EntryPoint = "manet_context_create_with_backends")]
+    private static partial IntPtr ContextCreateWithBackendsCore(
+        [MarshalAs(UnmanagedType.LPArray, ArraySubType = UnmanagedType.I4)] int[] backends,
+        uint backendCount);
+
     [LibraryImport(LibraryName, EntryPoint = "manet_engine_destroy")]
     internal static partial void EngineDestroy(IntPtr handle);
+
+    [LibraryImport(LibraryName, EntryPoint = "manet_context_destroy")]
+    internal static partial void ContextDestroy(IntPtr handle);
 
     [LibraryImport(LibraryName, EntryPoint = "manet_engine_stop")]
     internal static partial int EngineStop(EngineHandle handle);
@@ -129,4 +190,24 @@ internal static partial class NativeMethods
 
     [LibraryImport(LibraryName, EntryPoint = "manet_result_description", StringMarshalling = StringMarshalling.Utf8)]
     internal static partial string DescribeResult(int result);
+
+    [LibraryImport(LibraryName, EntryPoint = "manet_context_get_devices")]
+    internal static unsafe partial int ContextGetDevices(
+        ContextHandle handle,
+        int deviceType,
+        NativeDeviceInfo* descriptors,
+        uint descriptorCapacity,
+        out uint deviceCount);
+
+    internal const int DeviceNameBufferSize = 256;
+    internal const int DeviceIdBufferSize = 513;
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
+    internal unsafe struct NativeDeviceInfo
+    {
+        public int DeviceType;
+        public int IsDefault;
+        public fixed byte Name[DeviceNameBufferSize];
+        public fixed byte Id[DeviceIdBufferSize];
+    }
 }

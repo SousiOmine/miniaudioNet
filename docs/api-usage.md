@@ -1,80 +1,93 @@
-# API 利用ガイド
+# API 使い方ガイド
 
-miniaudioNet の主な API と、アプリケーションでの利用パターンを紹介します。
+miniaudioNet の API と、典型的なアプリケーションでの利用方法をまとめています。
 
-## エンジンの生成
+## コンテキストとデバイス列挙
 
-`MiniaudioEngine.Create()` を利用すると、デフォルト設定でエンジンを構築できます。`EngineConfig` を渡すことで、チャネル数やサンプルレート、デバイス設定をカスタマイズできます。
+`MiniaudioContext` は miniaudio の `ma_context` を管理し、利用したいバックエンドの優先順位やデバイス列挙を制御できます。
 
 ```csharp
-var config = EngineConfig.CreateDefault();
-config.Channels = 2;
-config.SampleRate = 48000;
+using var context = MiniaudioContext.Create(new[] { MiniaudioBackend.Wasapi, MiniaudioBackend.CoreAudio });
+var playbackDevices = context.EnumerateDevices(MiniaudioDeviceKind.Playback);
 
-using var engine = MiniaudioEngine.Create(config);
+foreach (var (device, index) in playbackDevices.Select((d, i) => (d, i)))
+{
+    Console.WriteLine($"[{index}] {device.Name}" + (device.IsDefault ? " [default]" : string.Empty));
+}
 ```
+
+列挙結果に含まれる `DeviceId` は 16 進文字列化した `ma_device_id` で、そのまま `MiniaudioEngineOptions.PlaybackDeviceId` に設定できます。インデックスで選択したい場合は、`DeviceId` を保持しておきエンジン作成時に渡してください。
+
+## デバイスを指定したエンジン生成
+
+`MiniaudioEngineOptions` を使うと、既存コンテキストの共有、デバイス ID の明示、デバイスレスモードなどを選択できます。`NoDevice` を有効にする場合はサンプルレートとチャンネル数の指定が必須です。
+
+```csharp
+var engineOptions = new MiniaudioEngineOptions
+{
+    Context = context,
+    PlaybackDeviceId = playbackDevices[chosenIndex].DeviceId,
+    SampleRate = 48_000,
+};
+
+using var engine = MiniaudioEngine.Create(engineOptions);
+engine.Volume = 0.8f;
+```
+
+従来どおり `MiniaudioEngine.Create()` も利用できますが、明示的なデバイス制御は `MiniaudioEngineOptions` でのみ提供されます。
 
 ## サウンドの生成と再生
 
-`engine.CreateSound()` は、ファイルパスやストリーム、メモリバッファから `MiniaudioSound` を生成します。
+`MiniaudioEngine.CreateSound()` でファイルを、`CreateSoundFromPcmFrames()` でメモリ上の PCM をサウンドに変換できます。戻り値の `MiniaudioSound` からボリューム、ピッチ、パン、シーク位置などを制御します。
 
 ```csharp
 using var sound = engine.CreateSound("bgm.ogg", SoundInitFlags.Decode | SoundInitFlags.Async);
 sound.Volume = 0.8f;
+sound.Pitch = 1.05f;
 sound.Start();
 ```
 
-### ストリーミング再生
-
-大容量ファイルを扱う場合は `SoundInitFlags.Async` を付与することで、バックグラウンドでの読み込みを行いながら再生できます。
-
-## 音量・ピッチ・パン・ループ設定
-
-`MiniaudioSound` は音量だけでなくピッチとパンもプロパティで調整できます。`Pitch` は 0 より大きい値を指定してください。
+任意の PCM を即時再生する場合は次のようにします。
 
 ```csharp
-sound.Volume = 0.5f;
-sound.Pitch = 1.2f; // 20% 高いピッチ
-sound.Pan = -0.2f;  // 左寄り
-sound.IsLooping = true;
+var frames = GeneratePcm();
+using var pcmSound = engine.CreateSoundFromPcmFrames(frames, channels: 2, sampleRate: 48_000);
+pcmSound.Start();
 ```
 
-## 3D ポジショニング
+## 3D ポジショニングと進捗取得
 
-`Position` と `Direction` プロパティで音源の位置と向きを指定できます。`Positioning` を `SoundPositioning.Relative` にするとリスナーに対する相対座標で解釈されます。
+`Position` と `Direction` を設定すると 3D 空間での位置を制御できます。`SoundState` や `CursorInFrames` を参照すると進捗監視やループ処理が簡単です。
 
 ```csharp
 sound.Position = (0f, 1.2f, -3f);
 sound.Direction = (0f, 0f, 1f);
 sound.Positioning = SoundPositioning.Relative;
 
-engine.SetListenerPosition(0, 0f, 0f, 0f);
-```
-
-リスナーの移動や複数リスナーを扱いたい場合は `MiniaudioEngine.SetListenerPosition()` を活用してください。
-
-## 再生状態の監視
-
-```csharp
 while (sound.State is SoundState.Playing or SoundState.Starting)
 {
+    Console.WriteLine($"{sound.CursorInSeconds:0.00}s / {sound.LengthInSeconds:0.00}s");
     await Task.Delay(100);
 }
 ```
 
-`MiniaudioEngine` には複数のサウンドを管理するためのヘルパーも備わっています。
+## サンプルアプリの使い方
 
-```csharp
-engine.StopAll();
-engine.WaitForAllSoundsToStop();
+`samples/MiniaudioNet.Sample.Sine441` には、今回追加したコンテキスト・デバイス API を利用する CLI が含まれています。
+
+```powershell
+# デバイス一覧を表示
+pwsh dotnet run --project samples/MiniaudioNet.Sample.Sine441 -- --list
+
+# インデックス 2 のデバイスでサイン波を再生
+pwsh dotnet run --project samples/MiniaudioNet.Sample.Sine441 -- --device-index 2
+
+# WASAPI を最優先にして列挙し、DeviceId で直接指定
+pwsh dotnet run --project samples/MiniaudioNet.Sample.Sine441 -- --backend Wasapi --device-id <hex>
 ```
 
-## リソース管理
+`--backend` を複数指定すると、その順序でバックエンドをトライしながらコンテキストを初期化します。`--device-id` は `--list` で表示された 16 進文字列を貼り付けてください。
 
-- すべての `MiniaudioEngine` / `MiniaudioSound` は `IDisposable` を実装しています。
-- `using` ステートメントで包むか、明示的に `Dispose()` を呼び出してください。
+## リソース解放
 
-## エラーハンドリング
-
-- ファイルが見つからない場合やサポート外フォーマットの場合、`MiniaudioException` がスローされます。
-- ネイティブライブラリがロードできない場合は `DllNotFoundException` が発生します。`runtimes/<RID>/native/` の配置や `PATH`/`LD_LIBRARY_PATH` を確認してください。
+すべての `MiniaudioEngine` / `MiniaudioSound` / `MiniaudioContext` は `IDisposable` です。長時間実行するアプリケーションやテストでは `using` ステートメントでスコープを限定し、確実に `Dispose()` が呼ばれるようにしてください。

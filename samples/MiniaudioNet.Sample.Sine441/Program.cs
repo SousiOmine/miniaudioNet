@@ -1,4 +1,7 @@
 using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.Linq;
 using System.Threading.Tasks;
 using Miniaudio.Net;
 
@@ -10,19 +13,106 @@ const float EngineVolume = 0.8f;
 const float SoundVolume = 0.9f;
 const double WaveAmplitude = 0.6;
 
-var pcmFrames = GenerateSineWaveFrames(Frequency, SampleRate, Channels, DurationSeconds, WaveAmplitude);
+try
+{
+    var options = SampleOptions.Parse(args);
+    using var context = MiniaudioContext.Create(options.PreferredBackends);
+    IReadOnlyList<MiniaudioDeviceInfo>? cachedPlaybackDevices = null;
 
-using var engine = MiniaudioEngine.Create();
-engine.Volume = EngineVolume;
+    IReadOnlyList<MiniaudioDeviceInfo> LoadPlaybackDevices()
+        => cachedPlaybackDevices ??= context.EnumerateDevices(MiniaudioDeviceKind.Playback);
 
-using var sound = engine.CreateSoundFromPcmFrames(pcmFrames, Channels, SampleRate);
-sound.Volume = SoundVolume;
+    if (options.ListDevices)
+    {
+        var devices = LoadPlaybackDevices();
+        PrintDevices(devices);
+        return;
+    }
 
-Console.WriteLine($"Playing {Frequency} Hz sine wave for {DurationSeconds:0.#} seconds (sample rate: {SampleRate} Hz)...");
-sound.Start();
+    var pcmFrames = GenerateSineWaveFrames(Frequency, SampleRate, Channels, DurationSeconds, WaveAmplitude);
 
-await WaitForSoundToFinishAsync(sound);
-Console.WriteLine("Done.");
+    var playbackDevices = LoadPlaybackDevices();
+    var selectedDeviceId = options.ResolvePlaybackDeviceId(playbackDevices);
+    var engineOptions = new MiniaudioEngineOptions
+    {
+        Context = context,
+        PlaybackDeviceId = selectedDeviceId,
+        SampleRate = SampleRate,
+    };
+
+    using var engine = MiniaudioEngine.Create(engineOptions);
+    engine.Volume = EngineVolume;
+
+    using var sound = engine.CreateSoundFromPcmFrames(pcmFrames, Channels, SampleRate);
+    sound.Volume = SoundVolume;
+
+    AnnounceDevice(playbackDevices, selectedDeviceId);
+    Console.WriteLine($"Playing {Frequency} Hz sine wave for {DurationSeconds:0.#} seconds (sample rate: {SampleRate} Hz)...");
+    sound.Start();
+
+    await WaitForSoundToFinishAsync(sound);
+    Console.WriteLine("Done.");
+}
+catch (Exception ex)
+{
+    Console.Error.WriteLine($"Error: {ex.Message}");
+    Environment.ExitCode = 1;
+}
+
+static void AnnounceDevice(IReadOnlyList<MiniaudioDeviceInfo> devices, string? deviceId)
+{
+    if (string.IsNullOrWhiteSpace(deviceId))
+    {
+        Console.WriteLine("Using system default playback device.");
+        return;
+    }
+
+    var device = devices.FirstOrDefault(d => string.Equals(d.DeviceId, deviceId, StringComparison.OrdinalIgnoreCase));
+    if (device is null)
+    {
+        Console.WriteLine("Using explicit playback device (not found in current enumeration).");
+        return;
+    }
+
+    var label = device.IsDefault ? "default" : "explicit";
+    Console.WriteLine($"Using playback device '{device.Name}' ({label}).");
+}
+
+static void PrintDevices(IReadOnlyList<MiniaudioDeviceInfo> devices)
+{
+    if (devices.Count == 0)
+    {
+        Console.WriteLine("No playback devices were reported by the active miniaudio backends.");
+        return;
+    }
+
+    Console.WriteLine("Available playback devices (use --device-index N or --device-id <HEX> to select):\n");
+    for (var i = 0; i < devices.Count; i++)
+    {
+        var device = devices[i];
+        var defaultLabel = device.IsDefault ? " [default]" : string.Empty;
+        Console.WriteLine($"[{i}] {device.Name}{defaultLabel}");
+        PrintWrapped($"DeviceId: {device.DeviceId}", indent: 6, width: 90);
+        Console.WriteLine();
+    }
+}
+
+static void PrintWrapped(string text, int indent, int width)
+{
+    var indentString = new string(' ', indent);
+    var contentWidth = Math.Max(1, width - indent);
+    var remaining = text;
+    while (remaining.Length > contentWidth)
+    {
+        Console.WriteLine(indentString + remaining[..contentWidth]);
+        remaining = remaining[contentWidth..];
+    }
+
+    if (remaining.Length > 0)
+    {
+        Console.WriteLine(indentString + remaining);
+    }
+}
 
 static async Task WaitForSoundToFinishAsync(MiniaudioSound sound)
 {
@@ -51,4 +141,103 @@ static float[] GenerateSineWaveFrames(double frequency, int sampleRate, int chan
     }
 
     return buffer;
+}
+
+internal sealed record SampleOptions(
+    bool ListDevices,
+    string? DeviceId,
+    int? DeviceIndex,
+    IReadOnlyList<MiniaudioBackend> PreferredBackends)
+{
+    public static SampleOptions Parse(string[] args)
+    {
+        var listDevices = false;
+        string? deviceId = null;
+        int? deviceIndex = null;
+        var preferredBackends = new List<MiniaudioBackend>();
+
+        for (var i = 0; i < args.Length; i++)
+        {
+            switch (args[i])
+            {
+                case "--list":
+                case "--list-devices":
+                    listDevices = true;
+                    break;
+                case "--device-id":
+                    deviceId = RequireValue(args, ref i, "--device-id");
+                    break;
+                case "--device-index":
+                    var indexValue = RequireValue(args, ref i, "--device-index");
+                    if (!int.TryParse(indexValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedIndex) || parsedIndex < 0)
+                    {
+                        throw new ArgumentException("--device-index expects a non-negative integer.");
+                    }
+
+                    deviceIndex = parsedIndex;
+                    break;
+                case "--backend":
+                    var backendName = RequireValue(args, ref i, "--backend");
+                    if (!Enum.TryParse<MiniaudioBackend>(backendName, ignoreCase: true, out var backend))
+                    {
+                        throw new ArgumentException($"Unknown backend '{backendName}'.");
+                    }
+
+                    preferredBackends.Add(backend);
+                    break;
+                case "--help":
+                case "-h":
+                    PrintUsage();
+                    Environment.Exit(0);
+                    break;
+                default:
+                    throw new ArgumentException($"Unknown option '{args[i]}'. Use --help to see the supported switches.");
+            }
+        }
+
+        return new SampleOptions(listDevices, deviceId, deviceIndex, preferredBackends);
+    }
+
+    public string? ResolvePlaybackDeviceId(IReadOnlyList<MiniaudioDeviceInfo> devices)
+    {
+        if (!string.IsNullOrWhiteSpace(DeviceId))
+        {
+            return DeviceId;
+        }
+
+        if (DeviceIndex.HasValue)
+        {
+            if (DeviceIndex.Value < 0 || DeviceIndex.Value >= devices.Count)
+            {
+                throw new ArgumentOutOfRangeException(nameof(DeviceIndex), $"Device index {DeviceIndex.Value} is out of range. Listed devices: {devices.Count}.");
+            }
+
+            return devices[DeviceIndex.Value].DeviceId;
+        }
+
+        return null;
+    }
+
+    private static string RequireValue(string[] args, ref int index, string option)
+    {
+        if (index + 1 >= args.Length)
+        {
+            throw new ArgumentException($"Option '{option}' expects a value.");
+        }
+
+        index += 1;
+        return args[index];
+    }
+
+    private static void PrintUsage()
+    {
+        Console.WriteLine(
+            "Usage: dotnet run --project samples/MiniaudioNet.Sample.Sine441 -- [options]\n" +
+            "Options:\n" +
+            "  --list, --list-devices          Lists playback devices and exits.\n" +
+            "  --device-index <N>              Selects the Nth playback device reported by --list.\n" +
+            "  --device-id <HEX>               Selects a playback device by ID (see --list for values).\n" +
+            "  --backend <Name>                Adds a preferred backend (e.g., Wasapi, CoreAudio). Multiple allowed.\n" +
+            "  --help                          Prints this help.");
+    }
 }

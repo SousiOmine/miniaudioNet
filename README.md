@@ -76,3 +76,8 @@ dotnet run --project samples/MiniaudioNet.Sample -- <audio-file>
 - HRTF / 3D サウンドのリスナー設定補助
 - Linux / macOS / Windows 向けの自動テスト (Decoder モックなど)
 - `dotnet pack` と合わせた `dotnet nuget push` 自動化
+## デバイス / コンテキスト機能の使い方
+
+- `MiniaudioContext.Create()` でバックエンドを優先順位付きで初期化し、`EnumerateDevices()` から取得した `DeviceId` を保持できます。
+- `MiniaudioEngineOptions` に `Context` と `PlaybackDeviceId` を指定すると、任意のデバイスにエンジンを接続できます。`NoDevice` を指定する場合は `SampleRate` と `Channels` が必須です。
+- `samples/MiniaudioNet.Sample.Sine441` は `--list` や `--device-index`、`--backend` オプションを備え、デバイス列挙と選択の挙動を確認できる最小サンプルになりました。

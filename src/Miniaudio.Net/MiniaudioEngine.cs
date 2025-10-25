@@ -6,10 +6,12 @@ namespace Miniaudio.Net;
 public sealed class MiniaudioEngine : IDisposable
 {
     private EngineHandle? _handle;
+    private readonly MiniaudioContext? _context;
 
-    private MiniaudioEngine(EngineHandle handle)
+    private MiniaudioEngine(EngineHandle handle, MiniaudioContext? context = null)
     {
         _handle = handle ?? throw new ArgumentNullException(nameof(handle));
+        _context = context;
     }
 
     public static MiniaudioEngine Create()
@@ -21,6 +23,29 @@ public sealed class MiniaudioEngine : IDisposable
         }
 
         return new MiniaudioEngine(handle);
+    }
+
+    public static MiniaudioEngine Create(MiniaudioEngineOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        options.Validate();
+
+        var handle = NativeMethods.EngineCreateWithOptions(
+            options.Context?.DangerousHandle,
+            options.NormalizeDeviceId(),
+            options.SampleRate ?? 0,
+            options.Channels ?? 0,
+            options.PeriodSizeInFrames ?? 0,
+            options.PeriodSizeInMilliseconds ?? 0,
+            options.NoAutoStart,
+            options.NoDevice);
+
+        if (handle is null || handle.IsInvalid)
+        {
+            throw new InvalidOperationException("Failed to initialize miniaudio engine with the provided options. Confirm that the native miniaudionet library is built and discoverable.");
+        }
+
+        return new MiniaudioEngine(handle, options.Context);
     }
 
     public float Volume
@@ -54,6 +79,8 @@ public sealed class MiniaudioEngine : IDisposable
             return NativeMethods.EngineGetTimeInPcmFrames(_handle!);
         }
     }
+
+    public MiniaudioContext? Context => _context;
 
     public MiniaudioSound CreateSound(string filePath, SoundInitFlags flags = SoundInitFlags.None)
     {
