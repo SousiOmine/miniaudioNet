@@ -37,34 +37,43 @@ while [[ $# -gt 0 ]]; do
       exit 1
       ;;
   esac
-done
+resolve_preset_from_rid() {
+  case "$1" in
+    win-x64) echo "windows-x64" ;;
+    win-arm64) echo "windows-arm64" ;;
+    linux-x64) echo "linux-x64" ;;
+    linux-arm64) echo "linux-arm64" ;;
+    osx-x64) echo "macos-x64" ;;
+    osx-arm64) echo "macos-arm64" ;;
+    "") echo "" ;;
+    *) return 1 ;;
+  esac
+}
 
-declare -A MAP
-MAP["win-x64"]="windows-x64"
-MAP["win-arm64"]="windows-arm64"
-MAP["linux-x64"]="linux-x64"
-MAP["linux-arm64"]="linux-arm64"
-MAP["osx-x64"]="macos-x64"
-MAP["osx-arm64"]="macos-arm64"
+resolve_rid_from_preset() {
+  case "$1" in
+    windows-x64) echo "win-x64" ;;
+    windows-arm64) echo "win-arm64" ;;
+    linux-x64) echo "linux-x64" ;;
+    linux-arm64) echo "linux-arm64" ;;
+    macos-x64) echo "osx-x64" ;;
+    macos-arm64) echo "osx-arm64" ;;
+    "") echo "" ;;
+    *) return 1 ;;
+  esac
+}
 
 if [[ -z "$PRESET" ]]; then
   if [[ -z "$RID" ]]; then
     echo "RID か Preset のどちらかは必須です。" >&2
     exit 1
   fi
-  if [[ -z "${MAP[$RID]+_}" ]]; then
+  if ! PRESET="$(resolve_preset_from_rid "$RID")" || [[ -z "$PRESET" ]]; then
     echo "未知の RID '$RID' です。scripts/build-native.sh を更新してください。" >&2
     exit 1
   fi
-  PRESET="${MAP[$RID]}"
 else
-  for KEY in "${!MAP[@]}"; do
-    if [[ "${MAP[$KEY]}" == "$PRESET" ]]; then
-      RID="$KEY"
-      break
-    fi
-  done
-  if [[ -z "$RID" ]]; then
+  if ! RID="$(resolve_rid_from_preset "$PRESET")" || [[ -z "$RID" ]]; then
     echo "Preset '$PRESET' に対応する RID が定義されていません。" >&2
     exit 1
   fi
