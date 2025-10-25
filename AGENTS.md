@@ -1,56 +1,77 @@
 # miniaudioNet
 
-miniaudioNet は、シングルヘッダーの軽量オーディオライブラリである [miniaudio](https://github.com/mackron/miniaudio) を .NET から扱うための極小ラッパーです。ネイティブ側にエンジンとサウンドの安全なハンドルを用意し、C# からは `MiniaudioEngine` と `MiniaudioSound` で音声再生やボリューム制御、シーク、進捗監視が行えます。
+miniaudioNet は、シングルヘッダーの軽量オーディオライブラリ [miniaudio](https://github.com/mackron/miniaudio) を .NET から安全に扱うための極小ラッパーです。ネイティブ側で `ma_engine` / `ma_sound` を管理し、C# からは `MiniaudioEngine` と `MiniaudioSound` で再生・ボリューム制御・シーク・進捗監視を手軽に行えます。
 
 ## ディレクトリ構成
 
 ```
 miniaudioNet/
-├── native/                 # miniaudionet.dll/.so を生成する CMake プロジェクト
-│   └── manet_bridge.c      # ma_engine と ma_sound への薄いブリッジ
-├── third_party/miniaudio/  # 公式 miniaudio ヘッダー (2025-10-25 時点の master)
-├── src/Miniaudio.Net/      # C# ラッパー本体 (net8.0)
-└── samples/MiniaudioNet.Sample/ # 簡易的な再生サンプル
+├── native/                     # CMake ベースのネイティブブリッジ (miniaudionet)
+│   ├── CMakeLists.txt          # ma_engine / ma_sound を DLL/SO/DYLIB 化
+│   └── CMakePresets.json       # 各 OS / RID 向けのビルドプリセット
+├── scripts/                    # ネイティブ資産を出力する補助スクリプト
+├── src/Miniaudio.Net/          # .NET 8.0 ラッパー (NuGet パッケージ本体)
+├── samples/MiniaudioNet.Sample # 簡単な再生コンソールアプリ
+└── third_party/miniaudio/      # 付属 miniaudio ヘッダー
 ```
 
 ## 必要条件
 
 - CMake 3.21 以上
-- C コンパイラ (MSVC / clang / gcc など)
+- C/C++ コンパイラ (MSVC, clang, gcc など)
 - .NET SDK 8.0 以上
 
-## ネイティブライブラリのビルド
+## ネイティブバイナリの取得
 
-1. `native` ディレクトリでビルドディレクトリを作成
-   ```bash
-   cmake -S native -B build/native -DCMAKE_BUILD_TYPE=Release
-   cmake --build build/native --config Release
-   ```
-2. 生成された共有ライブラリ (`build/native/Release/miniaudionet.dll` など) を .NET 実行時に見つかる場所へ配置します。推奨: `src/Miniaudio.Net/runtimes/<RID>/native/` を作成しコピーするか、`PATH` / `LD_LIBRARY_PATH` に追加してください。
+GitHub Actions (`.github/workflows/ci.yml`) では Windows / Linux / macOS 各 RID 向けに `miniaudionet` をビルドし、成果物を NuGet パッケージへ自動投入します。ローカルでも同じ出力を得たい場合は次のスクリプトを利用してください。
 
-## .NET ライブラリとサンプルのビルド
+### PowerShell (Windows)
 
-```bash
-powershell -Command "dotnet build miniaudioNet.sln"
+```powershell
+pwsh ./scripts/build-native.ps1 -Rid win-x64   # 例: Windows x64 版
+pwsh ./scripts/build-native.ps1 -Rid win-arm64 # ARM64 版も同じコマンドで生成
 ```
 
-ネイティブライブラリを配置済みであれば、サンプルは次のように実行できます。
+### Bash (Linux / macOS)
 
 ```bash
-powershell -Command "dotnet run --project samples/MiniaudioNet.Sample -- <audio-file>"
+./scripts/build-native.sh --rid linux-x64
+./scripts/build-native.sh --rid osx-arm64
 ```
 
-## 主な公開 API
+各コマンドは CMakePresets を介して `build/native/<preset>/` にビルドし、`artifacts/native/<RID>/native/` に DLL/SO/DYLIB を配置します。`.csproj` はこのディレクトリを検出して `runtimes/<RID>/native/` として NuGet へ自動梱包し、同時に `bin/<Configuration>/<TFM>/runtimes/...` にコピーします。アプリ側ではパッケージを参照するだけでネイティブライブラリが解決されます。
 
-- `MiniaudioEngine.Create()` / `Dispose()`
-- `MiniaudioEngine.Play(string path)` : Fire-and-forget 再生
-- `MiniaudioEngine.CreateSound(string path, SoundInitFlags flags)` : サウンドハンドル作成
-- `MiniaudioSound.Start()/Stop()` / `SeekToFrame()`
-- `MiniaudioSound.Volume`, `State`, `LengthInSeconds`, `Progress`
+## ラッパーとサンプルのビルド
 
-## 今後の拡張案
+```powershell
+# ソリューション全体
+pwsh -Command "dotnet build miniaudioNet.sln -c Release"
 
-- miniaudio の `ma_device` やキャプチャ関連 API への対応
-- HRTF/3D サウンド向けのリスナー設定補助 API
-- Linux/macOS 用の CI ビルドとパッケージング (`dotnet pack`) サポート
-- 追加のユニットテスト (ファイルをモックするデコーダー差し替えなど)
+# パッケージのみを Release で生成
+pwsh -Command "dotnet pack src/Miniaudio.Net/Miniaudio.Net.csproj -c Release"
+```
+
+`dotnet pack` は `artifacts/native/**` の内容を自動で取り込み、`artifacts/packages/` に `.nupkg` と `.snupkg` を出力します。生成されたパッケージをローカルフィードに追加すれば、`.NET` プロジェクトへ参照するだけで Windows / macOS / Linux のいずれでも即動作します。
+
+サンプルの実行:
+
+```powershell
+pwsh -Command "dotnet run --project samples/MiniaudioNet.Sample -- <audio-file>"
+```
+
+## GitHub Actions ワークフロー概要
+
+`CI` ワークフローは以下を自動化します。
+
+1. 行列 (`win-x64`, `win-arm64`, `linux-x64`, `linux-arm64`, `osx-x64`, `osx-arm64`) でネイティブブリッジをビルド。
+2. 各 RID の成果物をアップロード。
+3. 収集済みのバイナリを使って `dotnet build` / `dotnet pack` を実行し、NuGet パッケージを生成。
+
+公開リリース時は `packages` アーティファクトから `.nupkg` を取得して NuGet.org や自前フィードへそのままプッシュできます。
+
+## 今後のアイデア
+
+- `ma_device` を利用したキャプチャ API
+- HRTF / 3D サウンドのリスナー設定補助
+- Linux / macOS / Windows 向けの自動テスト (Decoder モックなど)
+- `dotnet pack` と合わせた `dotnet nuget push` 自動化

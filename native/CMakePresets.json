@@ -47,7 +47,8 @@
         "CMAKE_INSTALL_PREFIX": "${sourceDir}/../artifacts/native/linux-x64"
       },
       "condition": {
-        "and": [
+        "type": "and",
+        "conditions": [
           {
             "type": "equals",
             "lhs": "${hostSystemName}",
@@ -71,7 +72,8 @@
         "CMAKE_INSTALL_PREFIX": "${sourceDir}/../artifacts/native/linux-arm64"
       },
       "condition": {
-        "and": [
+        "type": "and",
+        "conditions": [
           {
             "type": "equals",
             "lhs": "${hostSystemName}",
@@ -97,7 +99,8 @@
         "CMAKE_OSX_DEPLOYMENT_TARGET": "11.0"
       },
       "condition": {
-        "and": [
+        "type": "and",
+        "conditions": [
           {
             "type": "equals",
             "lhs": "${hostSystemName}",
@@ -123,7 +126,8 @@
         "CMAKE_OSX_DEPLOYMENT_TARGET": "11.0"
       },
       "condition": {
-        "and": [
+        "type": "and",
+        "conditions": [
           {
             "type": "equals",
             "lhs": "${hostSystemName}",
@@ -139,38 +143,6 @@
     }
   ],
   "buildPresets": [
-    {
-      "name": "windows-x64-release",
-      "configurePreset": "windows-x64",
-      "configuration": "Release"
-    },
-    {
-      "name": "windows-arm64-release",
-      "configurePreset": "windows-arm64",
-      "configuration": "Release"
-    },
-    {
-      "name": "linux-x64-release",
-      "configurePreset": "linux-x64",
-      "configuration": "Release"
-    },
-    {
-      "name": "linux-arm64-release",
-      "configurePreset": "linux-arm64",
-      "configuration": "Release"
-    },
-    {
-      "name": "macos-x64-release",
-      "configurePreset": "macos-x64",
-      "configuration": "Release"
-    },
-    {
-      "name": "macos-arm64-release",
-      "configurePreset": "macos-arm64",
-      "configuration": "Release"
-    }
-  ],
-  "installPresets": [
     {
       "name": "windows-x64-release",
       "configurePreset": "windows-x64",
