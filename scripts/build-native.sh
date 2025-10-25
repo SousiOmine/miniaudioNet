@@ -37,6 +37,9 @@ while [[ $# -gt 0 ]]; do
       exit 1
       ;;
   esac
+  shift
+done
+
 resolve_preset_from_rid() {
   case "$1" in
     win-x64) echo "windows-x64" ;;
