@@ -59,7 +59,14 @@ try {
     cmake --build --preset $buildPreset | Out-Null
 
     Write-Host "Installing artifacts for '$Rid'..."
-    cmake --install --preset $buildPreset | Out-Null
+    $buildDir = Join-Path $nativeDir "build/native/$Preset"
+    $installArgs = @("--install", $buildDir)
+
+    if ($Preset -like "windows-*") {
+        $installArgs += @("--config", $Configuration)
+    }
+
+    cmake @installArgs | Out-Null
 
     $outputDir = Join-Path $nativeDir "artifacts/native/$Rid"
     Write-Host "Nativeバイナリを $outputDir に配置しました。"
