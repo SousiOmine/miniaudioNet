@@ -87,6 +87,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 pushd "$REPO_ROOT/native" > /dev/null
 
+BUILD_DIR="$REPO_ROOT/build/native/$PRESET"
+
 echo "Configuring preset '$PRESET'..."
 cmake --preset "$PRESET"
 
@@ -94,7 +96,11 @@ echo "Building preset '$BUILD_PRESET'..."
 cmake --build --preset "$BUILD_PRESET"
 
 echo "Installing artifacts for RID '$RID'..."
-cmake --install --preset "$BUILD_PRESET"
+INSTALL_CMD=(cmake --install "$BUILD_DIR")
+case "$PRESET" in
+  windows-*) INSTALL_CMD+=(--config "$CONFIG") ;;
+esac
+"${INSTALL_CMD[@]}"
 
 echo "Native binaries are available under $REPO_ROOT/artifacts/native/$RID"
 
