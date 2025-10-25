@@ -3,7 +3,9 @@
 #include <stdint.h>
 #include <string.h>
 
+#if !defined(MINIAUDIO_IMPLEMENTATION)
 #define MINIAUDIO_IMPLEMENTATION
+#endif
 #include "miniaudio.h"
 
 #if defined(_WIN32)
@@ -401,6 +403,7 @@ MANET_API manet_sound* manet_sound_create_from_file_w(manet_engine* engineHandle
     soundHandle->state = MANET_SOUND_STATE_STOPPED;
     return soundHandle;
 }
+#endif
 
 static void manet_copy_string(char* dst, size_t dstSize, const char* src)
 {
@@ -520,7 +523,6 @@ static manet_engine* manet_engine_create_with_config(const ma_engine_config* inp
 
     return handle;
 }
-#endif
 
 MANET_API manet_sound* manet_sound_create_from_pcm_frames(manet_engine* engineHandle, const float* frames, ma_uint64 frameCount, ma_uint32 channels, ma_uint32 sampleRate, ma_uint32 flags)
 {
