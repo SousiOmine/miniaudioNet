@@ -2,6 +2,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
+#include <stdio.h>
 
 #if !defined(MINIAUDIO_IMPLEMENTATION)
 #define MINIAUDIO_IMPLEMENTATION
@@ -42,12 +43,39 @@ typedef enum manet_sound_state {
     MANET_SOUND_STATE_STOPPING = 3
 } manet_sound_state;
 
-typedef struct manet_sound {
+typedef struct manet_sound manet_sound;
+typedef void (*manet_sound_end_proc)(manet_sound* handle, void* userData);
+
+struct manet_sound {
     ma_sound sound;
     manet_sound_state state;
     ma_bool32 ownsAudioBuffer;
     ma_audio_buffer audioBuffer;
-} manet_sound;
+    /* Managed callback forwarding. */
+    void* managedEndUserData;
+    manet_sound_end_proc managedEndCallback;
+};
+
+typedef struct manet_resource_manager {
+    ma_resource_manager manager;
+} manet_resource_manager;
+
+typedef struct manet_resource_manager_config_simple {
+    ma_uint32 flags;
+    ma_uint32 decodedFormat;
+    ma_uint32 decodedChannels;
+    ma_uint32 decodedSampleRate;
+    ma_uint32 jobThreadCount;
+} manet_resource_manager_config_simple;
+
+typedef void (*manet_capture_device_proc)(const float* samples, ma_uint32 frameCount, ma_uint32 channelCount, void* userData);
+
+typedef struct manet_capture_device {
+    ma_device device;
+    manet_capture_device_proc callback;
+    void* userData;
+    ma_uint32 channelCount;
+} manet_capture_device;
 
 static void manet_copy_string(char* dst, size_t dstSize, const char* src);
 static void manet_device_id_to_hex(const ma_device_id* id, char* buffer, size_t bufferSize);
@@ -56,6 +84,9 @@ static ma_bool32 manet_device_id_from_hex(const char* hex, ma_device_id* id);
 static void manet_write_device_descriptor(manet_device_descriptor* dst, const ma_device_info* src, ma_device_type type);
 static ma_uint32 manet_min_u32(ma_uint32 a, ma_uint32 b);
 static manet_engine* manet_engine_create_with_config(const ma_engine_config* inputConfig);
+static void manet_apply_resource_manager_settings(ma_resource_manager_config* config, const manet_resource_manager_config_simple* settings);
+static void manet_sound_end_callback_trampoline(void* pUserData, ma_sound* pSound);
+static void manet_capture_device_data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount);
 
 static void* manet_alloc(size_t size)
 {
@@ -116,6 +147,38 @@ static manet_sound_state manet_sound_update_state(manet_sound* handle)
     handle->state = MANET_SOUND_STATE_STOPPED;
     return handle->state;
 }
+
+static void manet_sound_end_callback_trampoline(void* pUserData, ma_sound* pSound)
+{
+    (void)pSound;
+
+    manet_sound* handle = (manet_sound*)pUserData;
+    if (handle == NULL) {
+        return;
+    }
+
+    if (handle->managedEndCallback != NULL) {
+        handle->managedEndCallback(handle, handle->managedEndUserData);
+    }
+}
+
+#if !defined(MA_NO_DEVICE_IO)
+static void manet_capture_device_data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount)
+{
+    (void)pOutput;
+
+    if (pDevice == NULL) {
+        return;
+    }
+
+    manet_capture_device* handle = (manet_capture_device*)pDevice->pUserData;
+    if (handle == NULL || handle->callback == NULL || pInput == NULL) {
+        return;
+    }
+
+    handle->callback((const float*)pInput, frameCount, handle->channelCount, handle->userData);
+}
+#endif
 
 MANET_API manet_engine* manet_engine_create_default(void)
 {
@@ -197,8 +260,39 @@ MANET_API ma_result manet_engine_set_listener_position(manet_engine* handle, ma_
     return MA_SUCCESS;
 }
 
+MANET_API ma_result manet_engine_set_listener_direction(manet_engine* handle, ma_uint32 index, float x, float y, float z)
+{
+    if (manet_validate_engine(handle) != MA_SUCCESS) {
+        return MA_INVALID_OPERATION;
+    }
+
+    ma_engine_listener_set_direction(&handle->engine, index, x, y, z);
+    return MA_SUCCESS;
+}
+
+MANET_API ma_result manet_engine_set_listener_world_up(manet_engine* handle, ma_uint32 index, float x, float y, float z)
+{
+    if (manet_validate_engine(handle) != MA_SUCCESS) {
+        return MA_INVALID_OPERATION;
+    }
+
+    ma_engine_listener_set_world_up(&handle->engine, index, x, y, z);
+    return MA_SUCCESS;
+}
+
+MANET_API ma_result manet_engine_set_listener_velocity(manet_engine* handle, ma_uint32 index, float x, float y, float z)
+{
+    if (manet_validate_engine(handle) != MA_SUCCESS) {
+        return MA_INVALID_OPERATION;
+    }
+
+    ma_engine_listener_set_velocity(&handle->engine, index, x, y, z);
+    return MA_SUCCESS;
+}
+
 MANET_API manet_engine* manet_engine_create_with_options(
     manet_context* contextHandle,
+    manet_resource_manager* resourceManagerHandle,
     const char* playbackDeviceId,
     ma_uint32 sampleRate,
     ma_uint32 channelCount,
@@ -231,6 +325,9 @@ MANET_API manet_engine* manet_engine_create_with_options(
     (void)playbackDeviceId;
     (void)contextHandle;
 #endif
+    if (resourceManagerHandle != NULL) {
+        config.pResourceManager = &resourceManagerHandle->manager;
+    }
 
     if (sampleRate != 0) {
         config.sampleRate = sampleRate;
@@ -252,6 +349,40 @@ MANET_API manet_engine* manet_engine_create_with_options(
     config.noDevice = noDevice;
 
     return manet_engine_create_with_config(&config);
+}
+
+MANET_API manet_resource_manager* manet_resource_manager_create_with_config(const manet_resource_manager_config_simple* settings)
+{
+    manet_resource_manager* handle = (manet_resource_manager*)manet_alloc(sizeof(*handle));
+    if (handle == NULL) {
+        return NULL;
+    }
+
+    ma_resource_manager_config config = ma_resource_manager_config_init();
+    manet_apply_resource_manager_settings(&config, settings);
+
+    ma_result result = ma_resource_manager_init(&config, &handle->manager);
+    if (result != MA_SUCCESS) {
+        manet_free(handle);
+        return NULL;
+    }
+
+    return handle;
+}
+
+MANET_API manet_resource_manager* manet_resource_manager_create_default(void)
+{
+    return manet_resource_manager_create_with_config(NULL);
+}
+
+MANET_API void manet_resource_manager_destroy(manet_resource_manager* handle)
+{
+    if (handle == NULL) {
+        return;
+    }
+
+    ma_resource_manager_uninit(&handle->manager);
+    manet_free(handle);
 }
 
 MANET_API manet_context* manet_context_create_default(void)
@@ -501,6 +632,35 @@ static ma_uint32 manet_min_u32(ma_uint32 a, ma_uint32 b)
     return (a < b) ? a : b;
 }
 
+static void manet_apply_resource_manager_settings(
+    ma_resource_manager_config* config,
+    const manet_resource_manager_config_simple* settings)
+{
+    if (config == NULL || settings == NULL) {
+        return;
+    }
+
+    if (settings->flags != 0) {
+        config->flags = settings->flags;
+    }
+
+    if (settings->decodedFormat != 0) {
+        config->decodedFormat = (ma_format)settings->decodedFormat;
+    }
+
+    if (settings->decodedChannels != 0) {
+        config->decodedChannels = settings->decodedChannels;
+    }
+
+    if (settings->decodedSampleRate != 0) {
+        config->decodedSampleRate = settings->decodedSampleRate;
+    }
+
+    if (settings->jobThreadCount != 0) {
+        config->jobThreadCount = settings->jobThreadCount;
+    }
+}
+
 static manet_engine* manet_engine_create_with_config(const ma_engine_config* inputConfig)
 {
     ma_engine_config config;
@@ -517,6 +677,9 @@ static manet_engine* manet_engine_create_with_config(const ma_engine_config* inp
 
     ma_result result = ma_engine_init(&config, &handle->engine);
     if (result != MA_SUCCESS) {
+#if defined(_DEBUG)
+        fprintf(stderr, "[manet] ma_engine_init failed: %d (%s)\n", result, ma_result_description(result));
+#endif
         manet_free(handle);
         return NULL;
     }
@@ -661,6 +824,25 @@ MANET_API float manet_sound_get_pan(manet_sound* handle)
     return ma_sound_get_pan(&handle->sound);
 }
 
+MANET_API ma_result manet_sound_set_looping(manet_sound* handle, ma_bool32 isLooping)
+{
+    if (manet_validate_sound(handle) != MA_SUCCESS) {
+        return MA_INVALID_OPERATION;
+    }
+
+    ma_sound_set_looping(&handle->sound, isLooping);
+    return MA_SUCCESS;
+}
+
+MANET_API ma_bool32 manet_sound_is_looping(manet_sound* handle)
+{
+    if (manet_validate_sound(handle) != MA_SUCCESS) {
+        return MA_FALSE;
+    }
+
+    return ma_sound_is_looping(&handle->sound);
+}
+
 MANET_API ma_result manet_sound_set_position(manet_sound* handle, float x, float y, float z)
 {
     if (manet_validate_sound(handle) != MA_SUCCESS) {
@@ -728,6 +910,31 @@ MANET_API ma_positioning manet_sound_get_positioning(manet_sound* handle)
     return ma_sound_get_positioning(&handle->sound);
 }
 
+MANET_API ma_result manet_sound_set_fade_in_pcm_frames(manet_sound* handle, float volumeBeg, float volumeEnd, ma_uint64 fadeLengthInFrames)
+{
+    if (manet_validate_sound(handle) != MA_SUCCESS) {
+        return MA_INVALID_OPERATION;
+    }
+
+    ma_sound_set_fade_in_pcm_frames(&handle->sound, volumeBeg, volumeEnd, fadeLengthInFrames);
+    return MA_SUCCESS;
+}
+
+MANET_API ma_result manet_sound_set_fade_start_in_pcm_frames(
+    manet_sound* handle,
+    float volumeBeg,
+    float volumeEnd,
+    ma_uint64 fadeLengthInFrames,
+    ma_uint64 absoluteGlobalTimeInFrames)
+{
+    if (manet_validate_sound(handle) != MA_SUCCESS) {
+        return MA_INVALID_OPERATION;
+    }
+
+    ma_sound_set_fade_start_in_pcm_frames(&handle->sound, volumeBeg, volumeEnd, fadeLengthInFrames, absoluteGlobalTimeInFrames);
+    return MA_SUCCESS;
+}
+
 MANET_API manet_sound_state manet_sound_get_state(manet_sound* handle)
 {
     if (manet_validate_sound(handle) != MA_SUCCESS) {
@@ -764,6 +971,55 @@ MANET_API ma_result manet_sound_get_cursor_in_pcm_frames(manet_sound* handle, ma
     return ma_sound_get_cursor_in_pcm_frames(&handle->sound, cursor);
 }
 
+MANET_API ma_result manet_sound_set_start_time_in_pcm_frames(manet_sound* handle, ma_uint64 absoluteGlobalTimeInFrames)
+{
+    if (manet_validate_sound(handle) != MA_SUCCESS) {
+        return MA_INVALID_OPERATION;
+    }
+
+    ma_sound_set_start_time_in_pcm_frames(&handle->sound, absoluteGlobalTimeInFrames);
+    return MA_SUCCESS;
+}
+
+MANET_API ma_result manet_sound_set_stop_time_in_pcm_frames(manet_sound* handle, ma_uint64 absoluteGlobalTimeInFrames)
+{
+    if (manet_validate_sound(handle) != MA_SUCCESS) {
+        return MA_INVALID_OPERATION;
+    }
+
+    ma_sound_set_stop_time_in_pcm_frames(&handle->sound, absoluteGlobalTimeInFrames);
+    return MA_SUCCESS;
+}
+
+MANET_API ma_result manet_sound_set_stop_time_with_fade_in_pcm_frames(
+    manet_sound* handle,
+    ma_uint64 stopAbsoluteGlobalTimeInFrames,
+    ma_uint64 fadeLengthInFrames)
+{
+    if (manet_validate_sound(handle) != MA_SUCCESS) {
+        return MA_INVALID_OPERATION;
+    }
+
+    ma_sound_set_stop_time_with_fade_in_pcm_frames(&handle->sound, stopAbsoluteGlobalTimeInFrames, fadeLengthInFrames);
+    return MA_SUCCESS;
+}
+
+MANET_API ma_result manet_sound_set_end_callback(manet_sound* handle, manet_sound_end_proc callback, void* userData)
+{
+    if (manet_validate_sound(handle) != MA_SUCCESS) {
+        return MA_INVALID_OPERATION;
+    }
+
+    handle->managedEndCallback = callback;
+    handle->managedEndUserData = userData;
+
+    if (callback == NULL) {
+        return ma_sound_set_end_callback(&handle->sound, NULL, NULL);
+    }
+
+    return ma_sound_set_end_callback(&handle->sound, manet_sound_end_callback_trampoline, handle);
+}
+
 MANET_API ma_uint32 manet_sound_get_sample_rate(manet_sound* handle)
 {
     if (manet_validate_sound(handle) != MA_SUCCESS) {
@@ -776,6 +1032,120 @@ MANET_API ma_uint32 manet_sound_get_sample_rate(manet_sound* handle)
     }
 
     return sampleRate;
+}
+
+MANET_API manet_capture_device* manet_capture_device_create(
+    manet_context* contextHandle,
+    const char* captureDeviceId,
+    ma_uint32 sampleRate,
+    ma_uint32 channelCount,
+    manet_capture_device_proc callback,
+    void* userData)
+{
+#if defined(MA_NO_DEVICE_IO)
+    (void)contextHandle;
+    (void)captureDeviceId;
+    (void)sampleRate;
+    (void)channelCount;
+    (void)callback;
+    (void)userData;
+    return NULL;
+#else
+    if (callback == NULL || channelCount == 0) {
+        return NULL;
+    }
+
+    manet_capture_device* handle = (manet_capture_device*)manet_alloc(sizeof(*handle));
+    if (handle == NULL) {
+        return NULL;
+    }
+
+    memset(handle, 0, sizeof(*handle));
+
+    ma_device_config config = ma_device_config_init(ma_device_type_capture);
+    config.capture.format = ma_format_f32;
+    config.capture.channels = channelCount;
+    if (sampleRate != 0) {
+        config.sampleRate = sampleRate;
+    }
+
+    config.dataCallback = manet_capture_device_data_callback;
+    config.pUserData = handle;
+
+    ma_device_id captureId;
+    ma_device_id* captureIdPtr = NULL;
+    MA_ZERO_OBJECT(&captureId);
+
+    if (captureDeviceId != NULL && captureDeviceId[0] != '\0') {
+        if (manet_device_id_from_hex(captureDeviceId, &captureId) == MA_FALSE) {
+            manet_free(handle);
+            return NULL;
+        }
+
+        captureIdPtr = &captureId;
+    }
+
+    config.capture.pDeviceID = captureIdPtr;
+
+    ma_context* pContext = NULL;
+    if (contextHandle != NULL) {
+        pContext = &contextHandle->context;
+    }
+
+    ma_result result = ma_device_init(pContext, &config, &handle->device);
+    if (result != MA_SUCCESS) {
+        manet_free(handle);
+        return NULL;
+    }
+
+    handle->callback = callback;
+    handle->userData = userData;
+    handle->channelCount = config.capture.channels;
+
+    return handle;
+#endif
+}
+
+MANET_API ma_result manet_capture_device_start(manet_capture_device* handle)
+{
+#if defined(MA_NO_DEVICE_IO)
+    (void)handle;
+    return MA_INVALID_OPERATION;
+#else
+    if (handle == NULL) {
+        return MA_INVALID_OPERATION;
+    }
+
+    return ma_device_start(&handle->device);
+#endif
+}
+
+MANET_API ma_result manet_capture_device_stop(manet_capture_device* handle)
+{
+#if defined(MA_NO_DEVICE_IO)
+    (void)handle;
+    return MA_INVALID_OPERATION;
+#else
+    if (handle == NULL) {
+        return MA_INVALID_OPERATION;
+    }
+
+    return ma_device_stop(&handle->device);
+#endif
+}
+
+MANET_API void manet_capture_device_destroy(manet_capture_device* handle)
+{
+#if defined(MA_NO_DEVICE_IO)
+    (void)handle;
+#else
+    if (handle == NULL) {
+        return;
+    }
+
+    ma_device_uninit(&handle->device);
+    manet_free(handle);
+#endif
 }
 
 MANET_API const char* manet_result_description(ma_result result)

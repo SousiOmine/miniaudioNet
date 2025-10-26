@@ -6,12 +6,12 @@ using System.Threading.Tasks;
 using Miniaudio.Net;
 
 const double Frequency = 441.0;
-const int SampleRate = 44_100;
 const int Channels = 1;
 const double DurationSeconds = 3.0;
 const float EngineVolume = 0.8f;
 const float SoundVolume = 0.9f;
 const double WaveAmplitude = 0.6;
+const int FallbackSampleRate = 48_000;
 
 try
 {
@@ -29,25 +29,19 @@ try
         return;
     }
 
-    var pcmFrames = GenerateSineWaveFrames(Frequency, SampleRate, Channels, DurationSeconds, WaveAmplitude);
-
     var playbackDevices = LoadPlaybackDevices();
     var selectedDeviceId = options.ResolvePlaybackDeviceId(playbackDevices);
-    var engineOptions = new MiniaudioEngineOptions
-    {
-        Context = context,
-        PlaybackDeviceId = selectedDeviceId,
-        SampleRate = SampleRate,
-    };
-
-    using var engine = MiniaudioEngine.Create(engineOptions);
+    using var engine = CreateEngine(context, selectedDeviceId, options.SampleRate);
     engine.Volume = EngineVolume;
 
-    using var sound = engine.CreateSoundFromPcmFrames(pcmFrames, Channels, SampleRate);
+    var playbackSampleRate = GetEffectiveSampleRate(engine.SampleRate, options.SampleRate);
+    var pcmFrames = GenerateSineWaveFrames(Frequency, playbackSampleRate, Channels, DurationSeconds, WaveAmplitude);
+
+    using var sound = engine.CreateSoundFromPcmFrames(pcmFrames, Channels, (uint)playbackSampleRate);
     sound.Volume = SoundVolume;
 
     AnnounceDevice(playbackDevices, selectedDeviceId);
-    Console.WriteLine($"Playing {Frequency} Hz sine wave for {DurationSeconds:0.#} seconds (sample rate: {SampleRate} Hz)...");
+    Console.WriteLine($"Playing {Frequency} Hz sine wave for {DurationSeconds:0.#} seconds (sample rate: {playbackSampleRate} Hz)...");
     sound.Start();
 
     await WaitForSoundToFinishAsync(sound);
@@ -55,7 +49,8 @@ try
 }
 catch (Exception ex)
 {
-    Console.Error.WriteLine($"Error: {ex.Message}");
+    Console.Error.WriteLine("Error:");
+    Console.Error.WriteLine(ex);
     Environment.ExitCode = 1;
 }
 
@@ -122,6 +117,63 @@ static async Task WaitForSoundToFinishAsync(MiniaudioSound sound)
     }
 }
 
+static MiniaudioEngine CreateEngine(MiniaudioContext context, string? playbackDeviceId, int? sampleRateOverride)
+{
+    if (sampleRateOverride.HasValue && sampleRateOverride.Value <= 0)
+    {
+        throw new ArgumentOutOfRangeException(nameof(sampleRateOverride), "Sample rate must be greater than 0.");
+    }
+
+    var engineOptions = new MiniaudioEngineOptions
+    {
+        Context = context,
+        PlaybackDeviceId = playbackDeviceId,
+        SampleRate = sampleRateOverride.HasValue ? (uint)sampleRateOverride.Value : null,
+    };
+
+    try
+    {
+        return MiniaudioEngine.Create(engineOptions);
+    }
+    catch (InvalidOperationException ex) when (!sampleRateOverride.HasValue)
+    {
+        Console.Error.WriteLine("Warning: Failed to initialize engine with the device default. Retrying with 48 kHz...");
+
+        var fallbackOptions = new MiniaudioEngineOptions
+        {
+            Context = context,
+            PlaybackDeviceId = playbackDeviceId,
+            SampleRate = FallbackSampleRate,
+        };
+
+        try
+        {
+            return MiniaudioEngine.Create(fallbackOptions);
+        }
+        catch (InvalidOperationException)
+        {
+            throw new InvalidOperationException(
+                "Failed to initialize miniaudio engine. Verify that native binaries are available and the selected playback device is usable.",
+                ex);
+        }
+    }
+}
+
+static int GetEffectiveSampleRate(uint engineSampleRate, int? overrideSampleRate)
+{
+    if (overrideSampleRate.HasValue)
+    {
+        return overrideSampleRate.Value;
+    }
+
+    if (engineSampleRate > 0)
+    {
+        return (int)engineSampleRate;
+    }
+
+    return FallbackSampleRate;
+}
+
 static float[] GenerateSineWaveFrames(double frequency, int sampleRate, int channels, double durationSeconds, double amplitude)
 {
     var totalFrames = (int)(sampleRate * durationSeconds);
@@ -147,7 +199,8 @@ internal sealed record SampleOptions(
     bool ListDevices,
     string? DeviceId,
     int? DeviceIndex,
-    IReadOnlyList<MiniaudioBackend> PreferredBackends)
+    IReadOnlyList<MiniaudioBackend> PreferredBackends,
+    int? SampleRate)
 {
     public static SampleOptions Parse(string[] args)
     {
@@ -155,6 +208,7 @@ internal sealed record SampleOptions(
         string? deviceId = null;
         int? deviceIndex = null;
         var preferredBackends = new List<MiniaudioBackend>();
+        int? sampleRate = null;
 
         for (var i = 0; i < args.Length; i++)
         {
@@ -185,6 +239,15 @@ internal sealed record SampleOptions(
 
                     preferredBackends.Add(backend);
                     break;
+                case "--sample-rate":
+                    var sampleRateValue = RequireValue(args, ref i, "--sample-rate");
+                    if (!int.TryParse(sampleRateValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedSampleRate) || parsedSampleRate <= 0)
+                    {
+                        throw new ArgumentException("--sample-rate expects a positive integer.");
+                    }
+
+                    sampleRate = parsedSampleRate;
+                    break;
                 case "--help":
                 case "-h":
                     PrintUsage();
@@ -195,7 +258,7 @@ internal sealed record SampleOptions(
             }
         }
 
-        return new SampleOptions(listDevices, deviceId, deviceIndex, preferredBackends);
+        return new SampleOptions(listDevices, deviceId, deviceIndex, preferredBackends, sampleRate);
     }
 
     public string? ResolvePlaybackDeviceId(IReadOnlyList<MiniaudioDeviceInfo> devices)
@@ -238,6 +301,7 @@ internal sealed record SampleOptions(
             "  --device-index <N>              Selects the Nth playback device reported by --list.\n" +
             "  --device-id <HEX>               Selects a playback device by ID (see --list for values).\n" +
             "  --backend <Name>                Adds a preferred backend (e.g., Wasapi, CoreAudio). Multiple allowed.\n" +
+            "  --sample-rate <Hz>              Forces a playback sample rate (falls back to device default otherwise).\n" +
             "  --help                          Prints this help.");
     }
 }

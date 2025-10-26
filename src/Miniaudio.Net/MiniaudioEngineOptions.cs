@@ -6,6 +6,8 @@ public sealed class MiniaudioEngineOptions
 {
     public MiniaudioContext? Context { get; init; }
 
+    public MiniaudioResourceManager? ResourceManager { get; init; }
+
     public string? PlaybackDeviceId { get; init; }
 
     public uint? SampleRate { get; init; }

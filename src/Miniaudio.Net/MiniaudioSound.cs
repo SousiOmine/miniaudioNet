@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.InteropServices;
 using Miniaudio.Net.Interop;
 
 namespace Miniaudio.Net;
@@ -7,6 +8,10 @@ public sealed class MiniaudioSound : IDisposable
 {
     private SoundHandle? _handle;
     private readonly MiniaudioEngine _engine;
+    private event EventHandler? _ended;
+    private NativeMethods.SoundEndCallback? _endCallback;
+    private GCHandle _endCallbackHandle;
+    private bool _endCallbackHandleAllocated;
 
     internal MiniaudioSound(MiniaudioEngine engine, SoundHandle handle, string sourcePath)
     {
@@ -18,6 +23,20 @@ public sealed class MiniaudioSound : IDisposable
     public string SourcePath { get; }
 
     public MiniaudioEngine Engine => _engine;
+
+    public bool Looping
+    {
+        get
+        {
+            ThrowIfDisposed();
+            return NativeMethods.SoundIsLooping(_handle!) != 0;
+        }
+        set
+        {
+            ThrowIfDisposed();
+            NativeMethods.SoundSetLooping(_handle!, value ? 1 : 0).EnsureSuccess(nameof(Looping));
+        }
+    }
 
     public float Volume
     {
@@ -154,6 +173,25 @@ public sealed class MiniaudioSound : IDisposable
 
     public double Progress => LengthInFrames == 0 ? 0d : (double)CursorInFrames / LengthInFrames;
 
+    public event EventHandler? Ended
+    {
+        add
+        {
+            ThrowIfDisposed();
+            _ended += value;
+            EnsureEndCallbackRegistered();
+        }
+        remove
+        {
+            ThrowIfDisposed();
+            _ended -= value;
+            if (_ended is null)
+            {
+                DisableEndCallback();
+            }
+        }
+    }
+
     public void Start()
     {
         ThrowIfDisposed();
@@ -174,6 +212,58 @@ public sealed class MiniaudioSound : IDisposable
 
     public void SeekToStart() => SeekToFrame(0);
 
+    public void ApplyFade(float fromVolume, float toVolume, ulong lengthInFrames)
+    {
+        ThrowIfDisposed();
+        NativeMethods.SoundSetFadeInFrames(_handle!, fromVolume, toVolume, lengthInFrames).EnsureSuccess(nameof(ApplyFade));
+    }
+
+    public void ApplyFade(float fromVolume, float toVolume, TimeSpan duration)
+    {
+        ApplyFade(fromVolume, toVolume, ConvertTimeSpanToFrames(duration));
+    }
+
+    public void ApplyFade(float fromVolume, float toVolume, TimeSpan startDelay, TimeSpan duration)
+    {
+        ThrowIfDisposed();
+        var fadeLength = ConvertTimeSpanToFrames(duration);
+        var startFrame = _engine.GetAbsoluteTimeInFrames(startDelay);
+        NativeMethods.SoundSetFadeStartInFrames(_handle!, fromVolume, toVolume, fadeLength, startFrame).EnsureSuccess(nameof(ApplyFade));
+    }
+
+    public void ScheduleStart(ulong absoluteFrameIndex)
+    {
+        ThrowIfDisposed();
+        NativeMethods.SoundSetStartTimeInFrames(_handle!, absoluteFrameIndex).EnsureSuccess(nameof(ScheduleStart));
+    }
+
+    public void ScheduleStart(TimeSpan delay)
+    {
+        ScheduleStart(_engine.GetAbsoluteTimeInFrames(delay));
+    }
+
+    public void ScheduleStop(ulong absoluteFrameIndex)
+    {
+        ThrowIfDisposed();
+        NativeMethods.SoundSetStopTimeInFrames(_handle!, absoluteFrameIndex).EnsureSuccess(nameof(ScheduleStop));
+    }
+
+    public void ScheduleStop(TimeSpan delay)
+    {
+        ScheduleStop(_engine.GetAbsoluteTimeInFrames(delay));
+    }
+
+    public void ScheduleStop(ulong absoluteFrameIndex, ulong fadeLengthInFrames)
+    {
+        ThrowIfDisposed();
+        NativeMethods.SoundSetStopTimeWithFadeInFrames(_handle!, absoluteFrameIndex, fadeLengthInFrames).EnsureSuccess(nameof(ScheduleStop));
+    }
+
+    public void ScheduleStop(TimeSpan delay, TimeSpan fadeLength)
+    {
+        ScheduleStop(_engine.GetAbsoluteTimeInFrames(delay), ConvertTimeSpanToFrames(fadeLength));
+    }
+
     private double ConvertFramesToSeconds(ulong frames)
     {
         var rate = SampleRate;
@@ -185,6 +275,86 @@ public sealed class MiniaudioSound : IDisposable
         return frames / (double)rate;
     }
 
+    private ulong ConvertTimeSpanToFrames(TimeSpan duration)
+    {
+        if (duration <= TimeSpan.Zero)
+        {
+            return 0;
+        }
+
+        var rate = SampleRate;
+        if (rate == 0)
+        {
+            return 0;
+        }
+
+        var frames = duration.TotalSeconds * rate;
+        return (ulong)Math.Max(0, Math.Round(frames, MidpointRounding.AwayFromZero));
+    }
+
+    private void EnsureEndCallbackRegistered()
+    {
+        if (_endCallback is not null)
+        {
+            return;
+        }
+
+        _endCallback = HandleNativeSoundEnded;
+        _endCallbackHandle = GCHandle.Alloc(this, GCHandleType.Normal);
+        _endCallbackHandleAllocated = true;
+        NativeMethods.SoundSetEndCallback(_handle!, _endCallback, GCHandle.ToIntPtr(_endCallbackHandle)).EnsureSuccess(nameof(Ended));
+    }
+
+    private void DisableEndCallback()
+    {
+        if (_endCallback is null)
+        {
+            return;
+        }
+
+        NativeMethods.SoundSetEndCallback(_handle!, null, IntPtr.Zero).EnsureSuccess(nameof(Ended));
+        _endCallback = null;
+        if (_endCallbackHandleAllocated)
+        {
+            _endCallbackHandle.Free();
+            _endCallbackHandleAllocated = false;
+        }
+    }
+
+    private static void HandleNativeSoundEnded(SoundHandle soundHandle, IntPtr userData)
+    {
+        if (userData == IntPtr.Zero)
+        {
+            return;
+        }
+
+        var handle = GCHandle.FromIntPtr(userData);
+        if (handle.Target is not MiniaudioSound sound)
+        {
+            return;
+        }
+
+        sound.RaiseEnded();
+    }
+
+    private void RaiseEnded()
+    {
+        var handlers = _ended;
+        if (handlers is null)
+        {
+            return;
+        }
+
+        try
+        {
+            handlers.Invoke(this, EventArgs.Empty);
+        }
+        catch
+        {
+            // Intentionally ignore user exceptions to avoid terminating the audio thread.
+        }
+    }
+
     public void Dispose()
     {
         if (_handle is null)
@@ -192,6 +362,7 @@ public sealed class MiniaudioSound : IDisposable
             return;
         }
 
+        DisableEndCallback();
         _handle.Dispose();
         _handle = null;
         GC.SuppressFinalize(this);

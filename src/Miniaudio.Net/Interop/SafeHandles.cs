@@ -65,3 +65,45 @@ internal sealed class SoundHandle : SafeHandleZeroOrMinusOneIsInvalid
         return true;
     }
 }
+
+internal sealed class ResourceManagerHandle : SafeHandleZeroOrMinusOneIsInvalid
+{
+    private ResourceManagerHandle()
+        : base(true)
+    {
+    }
+
+    internal static ResourceManagerHandle FromIntPtr(IntPtr handle)
+    {
+        var safeHandle = new ResourceManagerHandle();
+        safeHandle.SetHandle(handle);
+        return safeHandle;
+    }
+
+    protected override bool ReleaseHandle()
+    {
+        NativeMethods.ResourceManagerDestroy(handle);
+        return true;
+    }
+}
+
+internal sealed class CaptureDeviceHandle : SafeHandleZeroOrMinusOneIsInvalid
+{
+    private CaptureDeviceHandle()
+        : base(true)
+    {
+    }
+
+    internal static CaptureDeviceHandle FromIntPtr(IntPtr handle)
+    {
+        var safeHandle = new CaptureDeviceHandle();
+        safeHandle.SetHandle(handle);
+        return safeHandle;
+    }
+
+    protected override bool ReleaseHandle()
+    {
+        NativeMethods.CaptureDeviceDestroy(handle);
+        return true;
+    }
+}

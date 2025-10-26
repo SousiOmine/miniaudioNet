@@ -7,11 +7,13 @@ public sealed class MiniaudioEngine : IDisposable
 {
     private EngineHandle? _handle;
     private readonly MiniaudioContext? _context;
+    private readonly MiniaudioResourceManager? _resourceManager;
 
-    private MiniaudioEngine(EngineHandle handle, MiniaudioContext? context = null)
+    private MiniaudioEngine(EngineHandle handle, MiniaudioContext? context = null, MiniaudioResourceManager? resourceManager = null)
     {
         _handle = handle ?? throw new ArgumentNullException(nameof(handle));
         _context = context;
+        _resourceManager = resourceManager;
     }
 
     public static MiniaudioEngine Create()
@@ -32,6 +34,7 @@ public sealed class MiniaudioEngine : IDisposable
 
         var handle = NativeMethods.EngineCreateWithOptions(
             options.Context?.DangerousHandle,
+            options.ResourceManager?.DangerousHandle,
             options.NormalizeDeviceId(),
             options.SampleRate ?? 0,
             options.Channels ?? 0,
@@ -45,7 +48,7 @@ public sealed class MiniaudioEngine : IDisposable
             throw new InvalidOperationException("Failed to initialize miniaudio engine with the provided options. Confirm that the native miniaudionet library is built and discoverable.");
         }
 
-        return new MiniaudioEngine(handle, options.Context);
+        return new MiniaudioEngine(handle, options.Context, options.ResourceManager);
     }
 
     public float Volume
@@ -81,6 +84,16 @@ public sealed class MiniaudioEngine : IDisposable
     }
 
     public MiniaudioContext? Context => _context;
+
+    public MiniaudioResourceManager? ResourceManager => _resourceManager;
+
+    public ulong GetAbsoluteTimeInFrames(TimeSpan offset)
+    {
+        ThrowIfDisposed();
+        var clampedSeconds = Math.Max(0d, offset.TotalSeconds);
+        var additionalFrames = (ulong)Math.Round(clampedSeconds * SampleRate, MidpointRounding.AwayFromZero);
+        return TimeInPcmFrames + additionalFrames;
+    }
 
     public MiniaudioSound CreateSound(string filePath, SoundInitFlags flags = SoundInitFlags.None)
     {
@@ -147,6 +160,24 @@ public sealed class MiniaudioEngine : IDisposable
     {
         ThrowIfDisposed();
         NativeMethods.EngineSetListenerPosition(_handle!, index, x, y, z).EnsureSuccess(nameof(SetListenerPosition));
+    }
+
+    public void SetListenerDirection(uint index, float x, float y, float z)
+    {
+        ThrowIfDisposed();
+        NativeMethods.EngineSetListenerDirection(_handle!, index, x, y, z).EnsureSuccess(nameof(SetListenerDirection));
+    }
+
+    public void SetListenerWorldUp(uint index, float x, float y, float z)
+    {
+        ThrowIfDisposed();
+        NativeMethods.EngineSetListenerWorldUp(_handle!, index, x, y, z).EnsureSuccess(nameof(SetListenerWorldUp));
+    }
+
+    public void SetListenerVelocity(uint index, float x, float y, float z)
+    {
+        ThrowIfDisposed();
+        NativeMethods.EngineSetListenerVelocity(_handle!, index, x, y, z).EnsureSuccess(nameof(SetListenerVelocity));
     }
 
     internal EngineHandle DangerousHandle

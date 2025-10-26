@@ -86,8 +86,77 @@ pwsh dotnet run --project samples/MiniaudioNet.Sample.Sine441 -- --device-index 
 pwsh dotnet run --project samples/MiniaudioNet.Sample.Sine441 -- --backend Wasapi --device-id <hex>
 ```
 
-`--backend` を複数指定すると、その順序でバックエンドをトライしながらコンテキストを初期化します。`--device-id` は `--list` で表示された 16 進文字列を貼り付けてください。
+`--backend` を複数指定すると、その順序でバックエンドをトライしながらコンテキストを初期化します。`--device-id` は `--list` で表示された 16 進文字列を貼り付けてください。`--sample-rate` を指定すると任意のサンプルレートを強制でき、未指定の場合はデバイス既定値を採用しつつ、初期化に失敗した場合は自動的に 48 kHz へフォールバックします。
 
 ## リソース解放
 
 すべての `MiniaudioEngine` / `MiniaudioSound` / `MiniaudioContext` は `IDisposable` です。長時間実行するアプリケーションやテストでは `using` ステートメントでスコープを限定し、確実に `Dispose()` が呼ばれるようにしてください。
+
+## リソースマネージャーを利用したストリーミング
+
+`MiniaudioResourceManager` は C# から `ma_resource_manager` を扱うためのラッパーです。デコード後のサンプルレートやチャンネル数を統一したい場合は `MiniaudioResourceManagerOptions` で設定し、`MiniaudioEngineOptions.ResourceManager` に渡してエンジンを生成します。これにより `SoundInitFlags.Stream | SoundInitFlags.Async` を使ったストリーミング再生でキャッシュやデコードスレッドを効率的に共有できます。
+
+```csharp
+using var resourceManager = MiniaudioResourceManager.Create(new MiniaudioResourceManagerOptions
+{
+    DecodedSampleRate = 48_000,
+    DecodedChannels = 2,
+    JobThreadCount = 2,
+});
+
+var engineOptions = new MiniaudioEngineOptions
+{
+    Context = context,
+    ResourceManager = resourceManager,
+    PlaybackDeviceId = playbackDeviceId,
+};
+
+using var engine = MiniaudioEngine.Create(engineOptions);
+using var streamingSound = engine.CreateSound("bgm.flac", SoundInitFlags.Stream | SoundInitFlags.Async | SoundInitFlags.Looping);
+streamingSound.Volume = 0.7f;
+streamingSound.Start();
+```
+
+## フェード / スケジューラ / End イベント
+
+`MiniaudioSound` では `Looping` プロパティでループ再生を制御できるほか、`ApplyFade` や `ScheduleStart` / `ScheduleStop` でフェードと再生タイミングを組み合わせることができます。`Ended` イベントにハンドラーを登録すれば、再生終了時に後片付けや次のサウンドの開始などを行えます。
+
+```csharp
+sound.Looping = true;
+sound.ApplyFade(0f, 0.8f, TimeSpan.FromSeconds(1));
+sound.ScheduleStart(TimeSpan.FromSeconds(2));
+sound.ScheduleStop(TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(2));
+sound.Ended += (_, __) => Console.WriteLine("Playback completed.");
+```
+
+## キャプチャデバイス
+
+`MiniaudioCaptureDevice` は入力デバイスからの PCM をイベントで受け取れます。`PcmCaptured` ではフレーム数・チャンネル数・サンプル配列が提供されるため、リアルタイムのレベルメーターなどを実装できます。
+
+```csharp
+using var capture = MiniaudioCaptureDevice.Create(new MiniaudioCaptureDeviceOptions
+{
+    Context = context,
+    SampleRate = 16_000,
+    Channels = 1,
+});
+
+capture.PcmCaptured += (_, e) =>
+{
+    double sum = 0;
+    foreach (var sample in e.Samples)
+    {
+        sum += sample * sample;
+    }
+
+    var rms = Math.Sqrt(sum / e.Samples.Length);
+    Console.WriteLine($"Mic RMS: {20 * Math.Log10(Math.Max(rms, 1e-6)):0.0} dBFS");
+};
+
+capture.Start();
+```
+
+## デバイス IO サンプル
+
+```powershell
+pwsh dotnet run --project samples/MiniaudioNet.Sample.DeviceIO -- --file ./bgm.flac --monitor --backend Wasapi
