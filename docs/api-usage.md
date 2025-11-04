@@ -55,6 +55,38 @@ using var pcmSound = engine.CreateSoundFromPcmFrames(frames, channels: 2, sample
 pcmSound.Start();
 ```
 
+## ストリーミングサウンド
+
+`MiniaudioStreamingSound` はリングバッファ越しに PCM フレームを継ぎ足しながら再生できます。`CreateStreamingSound()` でチャンネル数・サンプルレート・内部バッファ長を指定し、`AppendPcmFrames()` でインターリーブ済み PCM を随時投入してください。戻り値は実際に書き込めたフレーム数なので、バッファが一杯の場合はリトライ処理を実装します。
+
+```csharp
+using var streaming = engine.CreateStreamingSound(channels: 2, sampleRate: 48_000, bufferCapacityInFrames: 96_000);
+streaming.Volume = 0.6f;
+streaming.Start();
+
+Span<float> chunk = stackalloc float[4_800 * 2]; // 0.1 秒分（2ch）のバッファ
+FillWithSamples(chunk); // PCM を生成
+
+var framesToWrite = chunk.Length / (int)streaming.Channels;
+var writtenTotal = 0UL;
+while (writtenTotal < (ulong)framesToWrite)
+{
+    var slice = chunk[(int)(writtenTotal * streaming.Channels)..];
+    var written = streaming.AppendPcmFrames(slice);
+    if (written == 0)
+    {
+        Thread.Sleep(5);
+        continue;
+    }
+
+    writtenTotal += written;
+}
+
+streaming.SignalEndOfStream(); // 追加予定がなければ終端を通知
+```
+
+`QueuedFrames` や `AvailableFramesToWrite` を参照すると、どれだけキューに積まれているか／追加入力できるかをポーリングできます。`ResetBuffer()` でリングバッファを初期化し再度ストリームを流し込むことも可能です。動作例は `samples/MiniaudioNet.Sample.Streaming` で確認できます。
+
 ## 3D ポジショニングと進捗取得
 
 `Position` と `Direction` を設定すると 3D 空間での位置を制御できます。`SoundState` や `CursorInFrames` を参照すると進捗監視やループ処理が簡単です。

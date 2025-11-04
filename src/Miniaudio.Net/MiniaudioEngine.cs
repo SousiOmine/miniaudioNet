@@ -221,6 +221,34 @@ public sealed class MiniaudioEngine : IDisposable
         return new MiniaudioSound(this, soundHandle, "pcm:memory");
     }
 
+    public MiniaudioStreamingSound CreateStreamingSound(uint channels, uint sampleRate, uint bufferCapacityInFrames = 65536, SoundInitFlags flags = SoundInitFlags.None)
+    {
+        ThrowIfDisposed();
+
+        if (channels == 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(channels), "Channel count must be greater than 0.");
+        }
+
+        if (sampleRate == 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(sampleRate), "Sample rate must be greater than 0.");
+        }
+
+        if (bufferCapacityInFrames == 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(bufferCapacityInFrames), "Buffer capacity must be greater than 0.");
+        }
+
+        var soundHandle = NativeMethods.SoundCreateStreaming(_handle!, channels, sampleRate, bufferCapacityInFrames, (uint)flags);
+        if (soundHandle is null || soundHandle.IsInvalid)
+        {
+            throw new InvalidOperationException("Failed to create streaming sound. Confirm that the native miniaudionet library is up to date.");
+        }
+
+        return new MiniaudioStreamingSound(this, soundHandle, channels, sampleRate, bufferCapacityInFrames);
+    }
+
     public void Play(string filePath)
     {
         ThrowIfDisposed();

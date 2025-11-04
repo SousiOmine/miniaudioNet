@@ -60,6 +60,12 @@ dotnet pack src/Miniaudio.Net/Miniaudio.Net.csproj -c Release
 dotnet run --project samples/MiniaudioNet.Sample -- <audio-file>
 ```
 
+ストリーミング API の動作確認には次のコンソールアプリを利用できます。
+
+```powershell
+dotnet run --project samples/MiniaudioNet.Sample.Streaming -- [frequency-hz] [duration-seconds]
+```
+
 ## GitHub Actions ワークフロー概要
 
 `CI` ワークフローは以下を自動化します。

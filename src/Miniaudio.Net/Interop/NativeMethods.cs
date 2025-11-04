@@ -255,8 +255,58 @@ internal static partial class NativeMethods
     [LibraryImport(LibraryName, EntryPoint = "manet_sound_create_from_pcm_frames")]
     private static unsafe partial IntPtr SoundCreateFromPcmFramesCore(EngineHandle engine, float* frames, ulong frameCount, uint channels, uint sampleRate, uint flags);
 
+    internal static SoundHandle SoundCreateStreaming(EngineHandle engine, uint channels, uint sampleRate, uint capacityInFrames, uint flags)
+    {
+        var handle = SoundCreateStreamingCore(engine, channels, sampleRate, capacityInFrames, flags);
+        return SoundHandle.FromIntPtr(handle);
+    }
+
+    [LibraryImport(LibraryName, EntryPoint = "manet_sound_create_streaming")]
+    private static partial IntPtr SoundCreateStreamingCore(EngineHandle engine, uint channels, uint sampleRate, uint capacityInFrames, uint flags);
+
     [LibraryImport(LibraryName, EntryPoint = "manet_sound_destroy")]
     internal static partial void SoundDestroy(IntPtr handle);
+
+    internal static unsafe int SoundStreamAppendPcmFrames(SoundHandle handle, ReadOnlySpan<float> frames, ulong frameCount, out ulong framesWritten)
+    {
+        ulong written = 0;
+        fixed (float* pFrames = frames)
+        {
+            var result = SoundStreamAppendPcmFramesCore(handle, pFrames, frameCount, &written);
+            framesWritten = written;
+            return result;
+        }
+    }
+
+    [LibraryImport(LibraryName, EntryPoint = "manet_sound_stream_append_pcm_frames")]
+    private static unsafe partial int SoundStreamAppendPcmFramesCore(SoundHandle handle, float* frames, ulong frameCount, ulong* framesWritten);
+
+    [LibraryImport(LibraryName, EntryPoint = "manet_sound_stream_get_available_write")]
+    internal static partial int SoundStreamGetAvailableWrite(SoundHandle handle, out ulong availableFrames);
+
+    [LibraryImport(LibraryName, EntryPoint = "manet_sound_stream_get_queued_frames")]
+    internal static partial int SoundStreamGetQueuedFrames(SoundHandle handle, out ulong queuedFrames);
+
+    [LibraryImport(LibraryName, EntryPoint = "manet_sound_stream_get_capacity_in_frames")]
+    internal static partial ulong SoundStreamGetCapacityInFrames(SoundHandle handle);
+
+    [LibraryImport(LibraryName, EntryPoint = "manet_sound_stream_mark_end")]
+    internal static partial int SoundStreamMarkEnd(SoundHandle handle);
+
+    [LibraryImport(LibraryName, EntryPoint = "manet_sound_stream_clear_end")]
+    internal static partial int SoundStreamClearEnd(SoundHandle handle);
+
+    [LibraryImport(LibraryName, EntryPoint = "manet_sound_stream_is_end")]
+    internal static partial int SoundStreamIsEnd(SoundHandle handle);
+
+    [LibraryImport(LibraryName, EntryPoint = "manet_sound_stream_reset")]
+    internal static partial int SoundStreamReset(SoundHandle handle);
+
+    [LibraryImport(LibraryName, EntryPoint = "manet_sound_stream_get_channels")]
+    internal static partial uint SoundStreamGetChannels(SoundHandle handle);
+
+    [LibraryImport(LibraryName, EntryPoint = "manet_sound_stream_get_sample_rate")]
+    internal static partial uint SoundStreamGetSampleRate(SoundHandle handle);
 
     [LibraryImport(LibraryName, EntryPoint = "manet_sound_start")]
     internal static partial int SoundStart(SoundHandle handle);

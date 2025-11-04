@@ -17,6 +17,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MiniaudioNet.Sample.DeviceI
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MiniaudioNet.Sample.EngineControl", "samples\MiniaudioNet.Sample.EngineControl\MiniaudioNet.Sample.EngineControl.csproj", "{1F1289B2-EB26-4106-AB8C-6EE7DB74C8F9}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MiniaudioNet.Sample.Streaming", "samples\MiniaudioNet.Sample.Streaming\MiniaudioNet.Sample.Streaming.csproj", "{145DB9FB-D13A-4A3C-A0CB-7EE9109D504C}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -87,6 +89,18 @@ Global
 		{1F1289B2-EB26-4106-AB8C-6EE7DB74C8F9}.Release|x64.Build.0 = Release|Any CPU
 		{1F1289B2-EB26-4106-AB8C-6EE7DB74C8F9}.Release|x86.ActiveCfg = Release|Any CPU
 		{1F1289B2-EB26-4106-AB8C-6EE7DB74C8F9}.Release|x86.Build.0 = Release|Any CPU
+		{145DB9FB-D13A-4A3C-A0CB-7EE9109D504C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{145DB9FB-D13A-4A3C-A0CB-7EE9109D504C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{145DB9FB-D13A-4A3C-A0CB-7EE9109D504C}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{145DB9FB-D13A-4A3C-A0CB-7EE9109D504C}.Debug|x64.Build.0 = Debug|Any CPU
+		{145DB9FB-D13A-4A3C-A0CB-7EE9109D504C}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{145DB9FB-D13A-4A3C-A0CB-7EE9109D504C}.Debug|x86.Build.0 = Debug|Any CPU
+		{145DB9FB-D13A-4A3C-A0CB-7EE9109D504C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{145DB9FB-D13A-4A3C-A0CB-7EE9109D504C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{145DB9FB-D13A-4A3C-A0CB-7EE9109D504C}.Release|x64.ActiveCfg = Release|Any CPU
+		{145DB9FB-D13A-4A3C-A0CB-7EE9109D504C}.Release|x64.Build.0 = Release|Any CPU
+		{145DB9FB-D13A-4A3C-A0CB-7EE9109D504C}.Release|x86.ActiveCfg = Release|Any CPU
+		{145DB9FB-D13A-4A3C-A0CB-7EE9109D504C}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -97,5 +111,6 @@ Global
 		{A742FDF9-DB44-4E72-8B00-4F67CB0821F5} = {5D20AA90-6969-D8BD-9DCD-8634F4692FDA}
 		{DD2E0EAA-6D46-4E5B-A8BA-18C39992ADC9} = {5D20AA90-6969-D8BD-9DCD-8634F4692FDA}
 		{1F1289B2-EB26-4106-AB8C-6EE7DB74C8F9} = {5D20AA90-6969-D8BD-9DCD-8634F4692FDA}
+		{145DB9FB-D13A-4A3C-A0CB-7EE9109D504C} = {5D20AA90-6969-D8BD-9DCD-8634F4692FDA}
 	EndGlobalSection
 EndGlobal

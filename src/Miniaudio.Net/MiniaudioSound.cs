@@ -4,7 +4,7 @@ using Miniaudio.Net.Interop;
 
 namespace Miniaudio.Net;
 
-public sealed class MiniaudioSound : IDisposable
+public class MiniaudioSound : IDisposable
 {
     private SoundHandle? _handle;
     private readonly MiniaudioEngine _engine;
@@ -23,6 +23,15 @@ public sealed class MiniaudioSound : IDisposable
     public string SourcePath { get; }
 
     public MiniaudioEngine Engine => _engine;
+
+    internal SoundHandle DangerousHandle
+    {
+        get
+        {
+            ThrowIfDisposed();
+            return _handle!;
+        }
+    }
 
     public bool Looping
     {
@@ -368,7 +377,7 @@ public sealed class MiniaudioSound : IDisposable
         GC.SuppressFinalize(this);
     }
 
-    private void ThrowIfDisposed()
+    protected void ThrowIfDisposed()
     {
         if (_handle is null || _handle.IsClosed)
         {

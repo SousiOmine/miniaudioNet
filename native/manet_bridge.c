@@ -43,6 +43,7 @@ typedef enum manet_sound_state {
     MANET_SOUND_STATE_STOPPING = 3
 } manet_sound_state;
 
+typedef struct manet_pcm_stream manet_pcm_stream;
 typedef struct manet_sound manet_sound;
 typedef void (*manet_sound_end_proc)(manet_sound* handle, void* userData);
 
@@ -51,6 +52,8 @@ struct manet_sound {
     manet_sound_state state;
     ma_bool32 ownsAudioBuffer;
     ma_audio_buffer audioBuffer;
+    manet_pcm_stream* stream;
+    ma_bool32 isStreaming;
     /* Managed callback forwarding. */
     void* managedEndUserData;
     manet_sound_end_proc managedEndCallback;
@@ -87,6 +90,37 @@ static manet_engine* manet_engine_create_with_config(const ma_engine_config* inp
 static void manet_apply_resource_manager_settings(ma_resource_manager_config* config, const manet_resource_manager_config_simple* settings);
 static void manet_sound_end_callback_trampoline(void* pUserData, ma_sound* pSound);
 static void manet_capture_device_data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount);
+static manet_pcm_stream* manet_pcm_stream_create(ma_uint32 channels, ma_uint32 sampleRate, ma_uint32 capacityInFrames);
+static void manet_pcm_stream_destroy(manet_pcm_stream* stream);
+static ma_result manet_pcm_stream_append_pcm_frames(manet_pcm_stream* stream, const float* frames, ma_uint64 frameCount, ma_uint64* framesWritten);
+static ma_uint64 manet_pcm_stream_capacity(const manet_pcm_stream* stream);
+static ma_uint64 manet_pcm_stream_available_read(const manet_pcm_stream* stream);
+static ma_uint64 manet_pcm_stream_available_write(const manet_pcm_stream* stream);
+static ma_result manet_pcm_stream_reset(manet_pcm_stream* stream);
+static void manet_pcm_stream_mark_end(manet_pcm_stream* stream);
+static void manet_pcm_stream_clear_end(manet_pcm_stream* stream);
+static ma_bool32 manet_pcm_stream_is_end_requested(const manet_pcm_stream* stream);
+static ma_uint32 manet_pcm_stream_get_channels(const manet_pcm_stream* stream);
+static ma_uint32 manet_pcm_stream_get_sample_rate(const manet_pcm_stream* stream);
+static ma_result manet_pcm_stream_on_read(ma_data_source* pDataSource, void* pFramesOut, ma_uint64 frameCount, ma_uint64* pFramesRead);
+static ma_result manet_pcm_stream_on_get_data_format(ma_data_source* pDataSource, ma_format* pFormat, ma_uint32* pChannels, ma_uint32* pSampleRate, ma_channel* pChannelMap, size_t channelMapCap);
+
+struct manet_pcm_stream {
+    ma_data_source_base ds;
+    ma_pcm_rb ringBuffer;
+    ma_atomic_bool32 endRequested;
+    ma_uint64 capacityInFrames;
+};
+
+static ma_data_source_vtable g_manet_pcm_stream_vtable = {
+    manet_pcm_stream_on_read,
+    NULL,
+    manet_pcm_stream_on_get_data_format,
+    NULL,
+    NULL,
+    NULL,
+    0
+};
 
 static void* manet_alloc(size_t size)
 {
@@ -119,6 +153,19 @@ static ma_result manet_validate_context(manet_context* handle)
 static ma_result manet_validate_sound(manet_sound* handle)
 {
     return handle == NULL ? MA_INVALID_OPERATION : MA_SUCCESS;
+}
+
+static ma_result manet_validate_streaming_sound(manet_sound* handle)
+{
+    if (handle == NULL) {
+        return MA_INVALID_OPERATION;
+    }
+
+    if (handle->isStreaming == MA_FALSE || handle->stream == NULL) {
+        return MA_INVALID_OPERATION;
+    }
+
+    return MA_SUCCESS;
 }
 
 static manet_sound_state manet_sound_update_state(manet_sound* handle)
@@ -179,6 +226,315 @@ static void manet_capture_device_data_callback(ma_device* pDevice, void* pOutput
     handle->callback((const float*)pInput, frameCount, handle->channelCount, handle->userData);
 }
 #endif
+
+static manet_pcm_stream* manet_pcm_stream_create(ma_uint32 channels, ma_uint32 sampleRate, ma_uint32 capacityInFrames)
+{
+    if (channels == 0 || sampleRate == 0 || capacityInFrames == 0) {
+        return NULL;
+    }
+
+    manet_pcm_stream* stream = (manet_pcm_stream*)manet_alloc(sizeof(*stream));
+    if (stream == NULL) {
+        return NULL;
+    }
+
+    memset(stream, 0, sizeof(*stream));
+
+    ma_result result = ma_pcm_rb_init(ma_format_f32, channels, capacityInFrames, NULL, NULL, &stream->ringBuffer);
+    if (result != MA_SUCCESS) {
+        manet_free(stream);
+        return NULL;
+    }
+
+    stream->capacityInFrames = capacityInFrames;
+    stream->ringBuffer.sampleRate = sampleRate;
+    ma_atomic_bool32_set(&stream->endRequested, MA_FALSE);
+
+    ma_data_source_config config = ma_data_source_config_init();
+    config.vtable = &g_manet_pcm_stream_vtable;
+
+    result = ma_data_source_init(&config, &stream->ds);
+    if (result != MA_SUCCESS) {
+        ma_pcm_rb_uninit(&stream->ringBuffer);
+        manet_free(stream);
+        return NULL;
+    }
+
+    return stream;
+}
+
+static void manet_pcm_stream_destroy(manet_pcm_stream* stream)
+{
+    if (stream == NULL) {
+        return;
+    }
+
+    ma_data_source_uninit((ma_data_source*)&stream->ds);
+    ma_pcm_rb_uninit(&stream->ringBuffer);
+    manet_free(stream);
+}
+
+static ma_uint64 manet_pcm_stream_capacity(const manet_pcm_stream* stream)
+{
+    if (stream == NULL) {
+        return 0;
+    }
+
+    return stream->capacityInFrames;
+}
+
+static ma_uint64 manet_pcm_stream_available_read(const manet_pcm_stream* stream)
+{
+    if (stream == NULL) {
+        return 0;
+    }
+
+    return ma_pcm_rb_available_read((ma_pcm_rb*)&stream->ringBuffer);
+}
+
+static ma_uint64 manet_pcm_stream_available_write(const manet_pcm_stream* stream)
+{
+    if (stream == NULL) {
+        return 0;
+    }
+
+    return ma_pcm_rb_available_write((ma_pcm_rb*)&stream->ringBuffer);
+}
+
+static ma_result manet_pcm_stream_reset(manet_pcm_stream* stream)
+{
+    if (stream == NULL) {
+        return MA_INVALID_OPERATION;
+    }
+
+    ma_pcm_rb_reset(&stream->ringBuffer);
+    ma_atomic_bool32_set(&stream->endRequested, MA_FALSE);
+    return MA_SUCCESS;
+}
+
+static void manet_pcm_stream_mark_end(manet_pcm_stream* stream)
+{
+    if (stream == NULL) {
+        return;
+    }
+
+    ma_atomic_bool32_set(&stream->endRequested, MA_TRUE);
+}
+
+static void manet_pcm_stream_clear_end(manet_pcm_stream* stream)
+{
+    if (stream == NULL) {
+        return;
+    }
+
+    ma_atomic_bool32_set(&stream->endRequested, MA_FALSE);
+}
+
+static ma_bool32 manet_pcm_stream_is_end_requested(const manet_pcm_stream* stream)
+{
+    if (stream == NULL) {
+        return MA_FALSE;
+    }
+
+    return ma_atomic_bool32_get(&((manet_pcm_stream*)stream)->endRequested);
+}
+
+static ma_uint32 manet_pcm_stream_get_channels(const manet_pcm_stream* stream)
+{
+    if (stream == NULL) {
+        return 0;
+    }
+
+    return stream->ringBuffer.channels;
+}
+
+static ma_uint32 manet_pcm_stream_get_sample_rate(const manet_pcm_stream* stream)
+{
+    if (stream == NULL) {
+        return 0;
+    }
+
+    return stream->ringBuffer.sampleRate;
+}
+
+static ma_result manet_pcm_stream_append_pcm_frames(manet_pcm_stream* stream, const float* frames, ma_uint64 frameCount, ma_uint64* framesWritten)
+{
+    if (framesWritten != NULL) {
+        *framesWritten = 0;
+    }
+
+    if (stream == NULL) {
+        return MA_INVALID_OPERATION;
+    }
+
+    if (frameCount == 0) {
+        return MA_SUCCESS;
+    }
+
+    if (frames == NULL) {
+        return MA_INVALID_ARGS;
+    }
+
+    if (manet_pcm_stream_is_end_requested(stream)) {
+        return MA_INVALID_OPERATION;
+    }
+
+    ma_pcm_rb* rb = &stream->ringBuffer;
+    ma_uint64 totalWritten = 0;
+
+    while (totalWritten < frameCount) {
+        ma_uint64 framesRemaining = frameCount - totalWritten;
+        if (framesRemaining == 0) {
+            break;
+        }
+
+        ma_uint32 chunk = (framesRemaining > 0xFFFFFFFF) ? 0xFFFFFFFF : (ma_uint32)framesRemaining;
+
+        ma_uint32 available = ma_pcm_rb_available_write(rb);
+        if (available == 0) {
+            break;
+        }
+
+        if (chunk > available) {
+            chunk = available;
+        }
+
+        if (chunk == 0) {
+            break;
+        }
+
+        ma_uint32 mappedFrameCount = chunk;
+        void* mappedBuffer = NULL;
+        ma_result result = ma_pcm_rb_acquire_write(rb, &mappedFrameCount, &mappedBuffer);
+        if (result != MA_SUCCESS || mappedFrameCount == 0) {
+            break;
+        }
+
+        const void* source = ma_offset_pcm_frames_const_ptr(frames, totalWritten, rb->format, rb->channels);
+        ma_copy_pcm_frames(mappedBuffer, source, mappedFrameCount, rb->format, rb->channels);
+
+        result = ma_pcm_rb_commit_write(rb, mappedFrameCount);
+        if (result != MA_SUCCESS) {
+            totalWritten += mappedFrameCount;
+            break;
+        }
+
+        totalWritten += mappedFrameCount;
+    }
+
+    if (framesWritten != NULL) {
+        *framesWritten = totalWritten;
+    }
+
+    return MA_SUCCESS;
+}
+
+static ma_result manet_pcm_stream_on_read(ma_data_source* pDataSource, void* pFramesOut, ma_uint64 frameCount, ma_uint64* pFramesRead)
+{
+    manet_pcm_stream* stream = (manet_pcm_stream*)pDataSource;
+    if (pFramesRead != NULL) {
+        *pFramesRead = 0;
+    }
+
+    if (stream == NULL || frameCount == 0) {
+        return MA_SUCCESS;
+    }
+
+    ma_pcm_rb* rb = &stream->ringBuffer;
+    ma_uint64 totalFramesRead = 0;
+
+    while (totalFramesRead < frameCount) {
+        ma_uint64 framesToRead = frameCount - totalFramesRead;
+        if (framesToRead > 0xFFFFFFFF) {
+            framesToRead = 0xFFFFFFFF;
+        }
+
+        ma_uint32 mappedFrameCount = (ma_uint32)framesToRead;
+        void* mappedBuffer = NULL;
+        ma_result result = ma_pcm_rb_acquire_read(rb, &mappedFrameCount, &mappedBuffer);
+        if (result != MA_SUCCESS) {
+            break;
+        }
+
+        if (mappedFrameCount == 0) {
+            break;
+        }
+
+        if (pFramesOut != NULL) {
+            void* dst = ma_offset_pcm_frames_ptr(pFramesOut, totalFramesRead, rb->format, rb->channels);
+            ma_copy_pcm_frames(dst, mappedBuffer, mappedFrameCount, rb->format, rb->channels);
+        }
+
+        result = ma_pcm_rb_commit_read(rb, mappedFrameCount);
+        if (result != MA_SUCCESS) {
+            break;
+        }
+
+        totalFramesRead += mappedFrameCount;
+    }
+
+    if (totalFramesRead == 0) {
+        if (manet_pcm_stream_is_end_requested(stream) && ma_pcm_rb_available_read(rb) == 0) {
+            return MA_AT_END;
+        }
+
+        if (pFramesOut != NULL) {
+            ma_silence_pcm_frames(pFramesOut, frameCount, rb->format, rb->channels);
+        }
+
+        if (pFramesRead != NULL) {
+            *pFramesRead = frameCount;
+        }
+
+        return MA_SUCCESS;
+    }
+
+    if (totalFramesRead < frameCount) {
+        if (!manet_pcm_stream_is_end_requested(stream) || ma_pcm_rb_available_read(rb) != 0) {
+            if (pFramesOut != NULL) {
+                ma_silence_pcm_frames(
+                    ma_offset_pcm_frames_ptr(pFramesOut, totalFramesRead, rb->format, rb->channels),
+                    frameCount - totalFramesRead,
+                    rb->format,
+                    rb->channels);
+            }
+
+            totalFramesRead = frameCount;
+        }
+    }
+
+    if (pFramesRead != NULL) {
+        *pFramesRead = totalFramesRead;
+    }
+
+    return MA_SUCCESS;
+}
+
+static ma_result manet_pcm_stream_on_get_data_format(ma_data_source* pDataSource, ma_format* pFormat, ma_uint32* pChannels, ma_uint32* pSampleRate, ma_channel* pChannelMap, size_t channelMapCap)
+{
+    manet_pcm_stream* stream = (manet_pcm_stream*)pDataSource;
+    if (stream == NULL) {
+        return MA_INVALID_OPERATION;
+    }
+
+    if (pFormat != NULL) {
+        *pFormat = stream->ringBuffer.format;
+    }
+
+    if (pChannels != NULL) {
+        *pChannels = stream->ringBuffer.channels;
+    }
+
+    if (pSampleRate != NULL) {
+        *pSampleRate = stream->ringBuffer.sampleRate;
+    }
+
+    if (pChannelMap != NULL) {
+        ma_channel_map_init_standard(ma_standard_channel_map_default, pChannelMap, channelMapCap, stream->ringBuffer.channels);
+    }
+
+    return MA_SUCCESS;
+}
 
 MANET_API manet_engine* manet_engine_create_default(void)
 {
@@ -900,6 +1256,161 @@ MANET_API manet_sound* manet_sound_create_from_pcm_frames(manet_engine* engineHa
     return soundHandle;
 }
 
+MANET_API manet_sound* manet_sound_create_streaming(manet_engine* engineHandle, ma_uint32 channels, ma_uint32 sampleRate, ma_uint32 capacityInFrames, ma_uint32 flags)
+{
+    if (manet_validate_engine(engineHandle) != MA_SUCCESS || channels == 0 || sampleRate == 0 || capacityInFrames == 0) {
+        return NULL;
+    }
+
+    manet_pcm_stream* stream = manet_pcm_stream_create(channels, sampleRate, capacityInFrames);
+    if (stream == NULL) {
+        return NULL;
+    }
+
+    manet_sound* soundHandle = (manet_sound*)manet_alloc(sizeof(*soundHandle));
+    if (soundHandle == NULL) {
+        manet_pcm_stream_destroy(stream);
+        return NULL;
+    }
+
+    memset(soundHandle, 0, sizeof(*soundHandle));
+
+    ma_result result = ma_sound_init_from_data_source(&engineHandle->engine, (ma_data_source*)&stream->ds, flags, NULL, &soundHandle->sound);
+    if (result != MA_SUCCESS) {
+        manet_pcm_stream_destroy(stream);
+        manet_free(soundHandle);
+        return NULL;
+    }
+
+    if ((flags & MA_SOUND_FLAG_LOOPING) != 0) {
+        ma_data_source_set_looping((ma_data_source*)&stream->ds, MA_TRUE);
+    }
+
+    soundHandle->state = MANET_SOUND_STATE_STOPPED;
+    soundHandle->stream = stream;
+    soundHandle->isStreaming = MA_TRUE;
+    soundHandle->ownsAudioBuffer = MA_FALSE;
+    return soundHandle;
+}
+
+MANET_API ma_result manet_sound_stream_append_pcm_frames(manet_sound* handle, const float* frames, ma_uint64 frameCount, ma_uint64* framesWritten)
+{
+    if (framesWritten != NULL) {
+        *framesWritten = 0;
+    }
+
+    if (manet_validate_streaming_sound(handle) != MA_SUCCESS) {
+        return MA_INVALID_OPERATION;
+    }
+
+    return manet_pcm_stream_append_pcm_frames(handle->stream, frames, frameCount, framesWritten);
+}
+
+MANET_API ma_result manet_sound_stream_get_available_write(manet_sound* handle, ma_uint64* availableFrames)
+{
+    if (availableFrames != NULL) {
+        *availableFrames = 0;
+    }
+
+    if (manet_validate_streaming_sound(handle) != MA_SUCCESS) {
+        return MA_INVALID_OPERATION;
+    }
+
+    if (availableFrames != NULL) {
+        *availableFrames = manet_pcm_stream_available_write(handle->stream);
+    }
+
+    return MA_SUCCESS;
+}
+
+MANET_API ma_result manet_sound_stream_get_queued_frames(manet_sound* handle, ma_uint64* queuedFrames)
+{
+    if (queuedFrames != NULL) {
+        *queuedFrames = 0;
+    }
+
+    if (manet_validate_streaming_sound(handle) != MA_SUCCESS) {
+        return MA_INVALID_OPERATION;
+    }
+
+    if (queuedFrames != NULL) {
+        *queuedFrames = manet_pcm_stream_available_read(handle->stream);
+    }
+
+    return MA_SUCCESS;
+}
+
+MANET_API ma_uint64 manet_sound_stream_get_capacity_in_frames(manet_sound* handle)
+{
+    if (manet_validate_streaming_sound(handle) != MA_SUCCESS) {
+        return 0;
+    }
+
+    return manet_pcm_stream_capacity(handle->stream);
+}
+
+MANET_API ma_result manet_sound_stream_mark_end(manet_sound* handle)
+{
+    if (manet_validate_streaming_sound(handle) != MA_SUCCESS) {
+        return MA_INVALID_OPERATION;
+    }
+
+    manet_pcm_stream_mark_end(handle->stream);
+    return MA_SUCCESS;
+}
+
+MANET_API ma_result manet_sound_stream_clear_end(manet_sound* handle)
+{
+    if (manet_validate_streaming_sound(handle) != MA_SUCCESS) {
+        return MA_INVALID_OPERATION;
+    }
+
+    manet_pcm_stream_clear_end(handle->stream);
+    return MA_SUCCESS;
+}
+
+MANET_API ma_bool32 manet_sound_stream_is_end(manet_sound* handle)
+{
+    if (manet_validate_streaming_sound(handle) != MA_SUCCESS) {
+        return MA_FALSE;
+    }
+
+    return manet_pcm_stream_is_end_requested(handle->stream);
+}
+
+MANET_API ma_result manet_sound_stream_reset(manet_sound* handle)
+{
+    if (manet_validate_streaming_sound(handle) != MA_SUCCESS) {
+        return MA_INVALID_OPERATION;
+    }
+
+    ma_result result = manet_pcm_stream_reset(handle->stream);
+    if (result != MA_SUCCESS) {
+        return result;
+    }
+
+    ma_sound_seek_to_pcm_frame(&handle->sound, 0);
+    return MA_SUCCESS;
+}
+
+MANET_API ma_uint32 manet_sound_stream_get_channels(manet_sound* handle)
+{
+    if (manet_validate_streaming_sound(handle) != MA_SUCCESS) {
+        return 0;
+    }
+
+    return manet_pcm_stream_get_channels(handle->stream);
+}
+
+MANET_API ma_uint32 manet_sound_stream_get_sample_rate(manet_sound* handle)
+{
+    if (manet_validate_streaming_sound(handle) != MA_SUCCESS) {
+        return 0;
+    }
+
+    return manet_pcm_stream_get_sample_rate(handle->stream);
+}
+
 MANET_API void manet_sound_destroy(manet_sound* handle)
 {
     if (handle == NULL) {
@@ -911,6 +1422,12 @@ MANET_API void manet_sound_destroy(manet_sound* handle)
     }
 
     ma_sound_uninit(&handle->sound);
+
+    if (handle->isStreaming == MA_TRUE && handle->stream != NULL) {
+        manet_pcm_stream_destroy(handle->stream);
+        handle->stream = NULL;
+    }
+
     manet_free(handle);
 }
 
