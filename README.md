@@ -1,6 +1,10 @@
 ﻿# miniaudioNet
 
-miniaudioNet は、シングルヘッダーの軽量オーディオライブラリ [miniaudio](https://github.com/mackron/miniaudio) を .NET から安全に扱うための極小ラッパーです。ネイティブ側で `ma_engine` / `ma_sound` を管理し、C# からは `MiniaudioEngine` と `MiniaudioSound` で再生・ボリューム制御・シーク・進捗監視を手軽に行えます。
+miniaudioNetは、C言語で書かれたオーディオライブラリである[miniaudio](https://github.com/mackron/miniaudio)を.NETから安全に扱うためラッパーライブラリです。
+
+現状はCodexまかせで開発されています。
+
+使用は推奨しません。
 
 ## ディレクトリ構成
 
@@ -67,23 +71,6 @@ dotnet run --project samples/MiniaudioNet.Sample.Streaming -- [frequency-hz] [du
 ```
 
 ## GitHub Actions ワークフロー概要
-
-`CI` ワークフローは以下を自動化します。
-
 1. 行列 (`win-x64`, `win-arm64`, `linux-x64`, `linux-arm64`, `osx-x64`, `osx-arm64`) でネイティブブリッジをビルド。
 2. 各 RID の成果物をアップロード。
 3. 収集済みのバイナリを使って `dotnet build` / `dotnet pack` を実行し、NuGet パッケージを生成。
-
-公開リリース時は `packages` アーティファクトから `.nupkg` を取得して NuGet.org や自前フィードへそのままプッシュできます。
-
-## 今後のアイデア
-
-- `ma_device` を利用したキャプチャ API
-- HRTF / 3D サウンドのリスナー設定補助
-- Linux / macOS / Windows 向けの自動テスト (Decoder モックなど)
-- `dotnet pack` と合わせた `dotnet nuget push` 自動化
-## デバイス / コンテキスト機能の使い方
-
-- `MiniaudioContext.Create()` でバックエンドを優先順位付きで初期化し、`EnumerateDevices()` から取得した `DeviceId` を保持できます。
-- `MiniaudioEngineOptions` に `Context` と `PlaybackDeviceId` を指定すると、任意のデバイスにエンジンを接続できます。`NoDevice` を指定する場合は `SampleRate` と `Channels` が必須です。
-- `samples/MiniaudioNet.Sample.Sine441` は `--list` や `--device-index`、`--backend` オプションを備え、デバイス列挙と選択の挙動を確認できる最小サンプルになりました。
