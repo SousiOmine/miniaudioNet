@@ -1,4 +1,5 @@
 using System;
+using System.Numerics;
 using Miniaudio.Net.Interop;
 
 namespace Miniaudio.Net;
@@ -65,12 +66,35 @@ public sealed class MiniaudioEngine : IDisposable
         }
     }
 
+    public float GainDb
+    {
+        get
+        {
+            ThrowIfDisposed();
+            return NativeMethods.EngineGetGainDb(_handle!);
+        }
+        set
+        {
+            ThrowIfDisposed();
+            NativeMethods.EngineSetGainDb(_handle!, value).EnsureSuccess(nameof(GainDb));
+        }
+    }
+
     public uint SampleRate
     {
         get
         {
             ThrowIfDisposed();
             return NativeMethods.EngineGetSampleRate(_handle!);
+        }
+    }
+
+    public uint Channels
+    {
+        get
+        {
+            ThrowIfDisposed();
+            return NativeMethods.EngineGetChannelCount(_handle!);
         }
     }
 
@@ -83,9 +107,44 @@ public sealed class MiniaudioEngine : IDisposable
         }
     }
 
+    public TimeSpan Time
+    {
+        get
+        {
+            ThrowIfDisposed();
+            var milliseconds = NativeMethods.EngineGetTimeInMilliseconds(_handle!);
+            return TimeSpan.FromMilliseconds(milliseconds);
+        }
+    }
+
+    public uint ListenerCount
+    {
+        get
+        {
+            ThrowIfDisposed();
+            return NativeMethods.EngineGetListenerCount(_handle!);
+        }
+    }
+
     public MiniaudioContext? Context => _context;
 
     public MiniaudioResourceManager? ResourceManager => _resourceManager;
+
+    public readonly struct ListenerCone
+    {
+        public ListenerCone(float innerAngleRadians, float outerAngleRadians, float outerGain)
+        {
+            InnerAngleRadians = innerAngleRadians;
+            OuterAngleRadians = outerAngleRadians;
+            OuterGain = outerGain;
+        }
+
+        public float InnerAngleRadians { get; }
+
+        public float OuterAngleRadians { get; }
+
+        public float OuterGain { get; }
+    }
 
     public ulong GetAbsoluteTimeInFrames(TimeSpan offset)
     {
@@ -93,6 +152,25 @@ public sealed class MiniaudioEngine : IDisposable
         var clampedSeconds = Math.Max(0d, offset.TotalSeconds);
         var additionalFrames = (ulong)Math.Round(clampedSeconds * SampleRate, MidpointRounding.AwayFromZero);
         return TimeInPcmFrames + additionalFrames;
+    }
+
+    public void SetTimeInFrames(ulong absoluteFrameIndex)
+    {
+        ThrowIfDisposed();
+        NativeMethods.EngineSetTimeInPcmFrames(_handle!, absoluteFrameIndex).EnsureSuccess(nameof(SetTimeInFrames));
+    }
+
+    public void SetTime(TimeSpan absoluteTime)
+    {
+        ThrowIfDisposed();
+        if (absoluteTime < TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(absoluteTime), "Time must be non-negative.");
+        }
+
+        var totalMilliseconds = Math.Round(absoluteTime.TotalMilliseconds, MidpointRounding.AwayFromZero);
+        var clampedMilliseconds = Math.Clamp(totalMilliseconds, 0d, ulong.MaxValue);
+        NativeMethods.EngineSetTimeInMilliseconds(_handle!, (ulong)clampedMilliseconds).EnsureSuccess(nameof(SetTime));
     }
 
     public MiniaudioSound CreateSound(string filePath, SoundInitFlags flags = SoundInitFlags.None)
@@ -150,6 +228,12 @@ public sealed class MiniaudioEngine : IDisposable
         NativeMethods.EnginePlaySound(_handle!, filePath).EnsureSuccess(nameof(Play));
     }
 
+    public void Start()
+    {
+        ThrowIfDisposed();
+        NativeMethods.EngineStart(_handle!).EnsureSuccess(nameof(Start));
+    }
+
     public void Stop()
     {
         ThrowIfDisposed();
@@ -162,10 +246,28 @@ public sealed class MiniaudioEngine : IDisposable
         NativeMethods.EngineSetListenerPosition(_handle!, index, x, y, z).EnsureSuccess(nameof(SetListenerPosition));
     }
 
+    public void SetListenerPosition(uint index, Vector3 position) => SetListenerPosition(index, position.X, position.Y, position.Z);
+
+    public Vector3 GetListenerPosition(uint index)
+    {
+        ThrowIfDisposed();
+        NativeMethods.EngineGetListenerPosition(_handle!, index, out var x, out var y, out var z).EnsureSuccess(nameof(GetListenerPosition));
+        return new Vector3(x, y, z);
+    }
+
     public void SetListenerDirection(uint index, float x, float y, float z)
     {
         ThrowIfDisposed();
         NativeMethods.EngineSetListenerDirection(_handle!, index, x, y, z).EnsureSuccess(nameof(SetListenerDirection));
+    }
+
+    public void SetListenerDirection(uint index, Vector3 direction) => SetListenerDirection(index, direction.X, direction.Y, direction.Z);
+
+    public Vector3 GetListenerDirection(uint index)
+    {
+        ThrowIfDisposed();
+        NativeMethods.EngineGetListenerDirection(_handle!, index, out var x, out var y, out var z).EnsureSuccess(nameof(GetListenerDirection));
+        return new Vector3(x, y, z);
     }
 
     public void SetListenerWorldUp(uint index, float x, float y, float z)
@@ -174,11 +276,64 @@ public sealed class MiniaudioEngine : IDisposable
         NativeMethods.EngineSetListenerWorldUp(_handle!, index, x, y, z).EnsureSuccess(nameof(SetListenerWorldUp));
     }
 
+    public void SetListenerWorldUp(uint index, Vector3 worldUp) => SetListenerWorldUp(index, worldUp.X, worldUp.Y, worldUp.Z);
+
+    public Vector3 GetListenerWorldUp(uint index)
+    {
+        ThrowIfDisposed();
+        NativeMethods.EngineGetListenerWorldUp(_handle!, index, out var x, out var y, out var z).EnsureSuccess(nameof(GetListenerWorldUp));
+        return new Vector3(x, y, z);
+    }
+
     public void SetListenerVelocity(uint index, float x, float y, float z)
     {
         ThrowIfDisposed();
         NativeMethods.EngineSetListenerVelocity(_handle!, index, x, y, z).EnsureSuccess(nameof(SetListenerVelocity));
     }
+
+    public void SetListenerVelocity(uint index, Vector3 velocity) => SetListenerVelocity(index, velocity.X, velocity.Y, velocity.Z);
+
+    public Vector3 GetListenerVelocity(uint index)
+    {
+        ThrowIfDisposed();
+        NativeMethods.EngineGetListenerVelocity(_handle!, index, out var x, out var y, out var z).EnsureSuccess(nameof(GetListenerVelocity));
+        return new Vector3(x, y, z);
+    }
+
+    public void SetListenerCone(uint index, float innerAngleInRadians, float outerAngleInRadians, float outerGain)
+    {
+        ThrowIfDisposed();
+        NativeMethods.EngineSetListenerCone(_handle!, index, innerAngleInRadians, outerAngleInRadians, outerGain).EnsureSuccess(nameof(SetListenerCone));
+    }
+
+    public void SetListenerCone(uint index, ListenerCone cone) => SetListenerCone(index, cone.InnerAngleRadians, cone.OuterAngleRadians, cone.OuterGain);
+
+    public ListenerCone GetListenerCone(uint index)
+    {
+        ThrowIfDisposed();
+        NativeMethods.EngineGetListenerCone(_handle!, index, out var inner, out var outer, out var gain).EnsureSuccess(nameof(GetListenerCone));
+        return new ListenerCone(inner, outer, gain);
+    }
+
+    public void SetListenerEnabled(uint index, bool isEnabled)
+    {
+        ThrowIfDisposed();
+        NativeMethods.EngineSetListenerEnabled(_handle!, index, isEnabled ? 1 : 0).EnsureSuccess(nameof(SetListenerEnabled));
+    }
+
+    public bool IsListenerEnabled(uint index)
+    {
+        ThrowIfDisposed();
+        return NativeMethods.EngineIsListenerEnabled(_handle!, index) != 0;
+    }
+
+    public uint FindClosestListener(float x, float y, float z)
+    {
+        ThrowIfDisposed();
+        return NativeMethods.EngineFindClosestListener(_handle!, x, y, z);
+    }
+
+    public uint FindClosestListener(Vector3 position) => FindClosestListener(position.X, position.Y, position.Z);
 
     internal EngineHandle DangerousHandle
     {

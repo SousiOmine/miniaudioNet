@@ -195,14 +195,22 @@ MANET_API void manet_engine_destroy(manet_engine* handle)
     manet_free(handle);
 }
 
+MANET_API ma_result manet_engine_start(manet_engine* handle)
+{
+    if (manet_validate_engine(handle) != MA_SUCCESS) {
+        return MA_INVALID_OPERATION;
+    }
+
+    return ma_engine_start(&handle->engine);
+}
+
 MANET_API ma_result manet_engine_stop(manet_engine* handle)
 {
     if (manet_validate_engine(handle) != MA_SUCCESS) {
         return MA_INVALID_OPERATION;
     }
 
-    ma_engine_stop(&handle->engine);
-    return MA_SUCCESS;
+    return ma_engine_stop(&handle->engine);
 }
 
 MANET_API ma_uint64 manet_engine_get_time_in_pcm_frames(manet_engine* handle)
@@ -212,6 +220,33 @@ MANET_API ma_uint64 manet_engine_get_time_in_pcm_frames(manet_engine* handle)
     }
 
     return ma_engine_get_time_in_pcm_frames(&handle->engine);
+}
+
+MANET_API ma_uint64 manet_engine_get_time_in_milliseconds(manet_engine* handle)
+{
+    if (manet_validate_engine(handle) != MA_SUCCESS) {
+        return 0;
+    }
+
+    return ma_engine_get_time_in_milliseconds(&handle->engine);
+}
+
+MANET_API ma_result manet_engine_set_time_in_pcm_frames(manet_engine* handle, ma_uint64 globalTime)
+{
+    if (manet_validate_engine(handle) != MA_SUCCESS) {
+        return MA_INVALID_OPERATION;
+    }
+
+    return ma_engine_set_time_in_pcm_frames(&handle->engine, globalTime);
+}
+
+MANET_API ma_result manet_engine_set_time_in_milliseconds(manet_engine* handle, ma_uint64 globalTime)
+{
+    if (manet_validate_engine(handle) != MA_SUCCESS) {
+        return MA_INVALID_OPERATION;
+    }
+
+    return ma_engine_set_time_in_milliseconds(&handle->engine, globalTime);
 }
 
 MANET_API ma_result manet_engine_set_volume(manet_engine* handle, float volume)
@@ -232,6 +267,24 @@ MANET_API float manet_engine_get_volume(manet_engine* handle)
     return ma_engine_get_volume(&handle->engine);
 }
 
+MANET_API ma_result manet_engine_set_gain_db(manet_engine* handle, float gainDB)
+{
+    if (manet_validate_engine(handle) != MA_SUCCESS) {
+        return MA_INVALID_OPERATION;
+    }
+
+    return ma_engine_set_gain_db(&handle->engine, gainDB);
+}
+
+MANET_API float manet_engine_get_gain_db(manet_engine* handle)
+{
+    if (manet_validate_engine(handle) != MA_SUCCESS) {
+        return 0.0f;
+    }
+
+    return ma_engine_get_gain_db(&handle->engine);
+}
+
 MANET_API ma_uint32 manet_engine_get_sample_rate(manet_engine* handle)
 {
     if (manet_validate_engine(handle) != MA_SUCCESS) {
@@ -239,6 +292,33 @@ MANET_API ma_uint32 manet_engine_get_sample_rate(manet_engine* handle)
     }
 
     return ma_engine_get_sample_rate(&handle->engine);
+}
+
+MANET_API ma_uint32 manet_engine_get_channels(manet_engine* handle)
+{
+    if (manet_validate_engine(handle) != MA_SUCCESS) {
+        return 0;
+    }
+
+    return ma_engine_get_channels(&handle->engine);
+}
+
+MANET_API ma_uint32 manet_engine_get_listener_count(manet_engine* handle)
+{
+    if (manet_validate_engine(handle) != MA_SUCCESS) {
+        return 0;
+    }
+
+    return ma_engine_get_listener_count(&handle->engine);
+}
+
+MANET_API ma_uint32 manet_engine_find_closest_listener(manet_engine* handle, float x, float y, float z)
+{
+    if (manet_validate_engine(handle) != MA_SUCCESS) {
+        return MA_LISTENER_INDEX_CLOSEST;
+    }
+
+    return ma_engine_find_closest_listener(&handle->engine, x, y, z);
 }
 
 MANET_API ma_result manet_engine_play_sound(manet_engine* handle, const char* path)
@@ -260,6 +340,20 @@ MANET_API ma_result manet_engine_set_listener_position(manet_engine* handle, ma_
     return MA_SUCCESS;
 }
 
+MANET_API ma_result manet_engine_get_listener_position(manet_engine* handle, ma_uint32 index, float* x, float* y, float* z)
+{
+    if (manet_validate_engine(handle) != MA_SUCCESS || x == NULL || y == NULL || z == NULL) {
+        return MA_INVALID_OPERATION;
+    }
+
+    ma_vec3f position = ma_engine_listener_get_position(&handle->engine, index);
+    *x = position.x;
+    *y = position.y;
+    *z = position.z;
+
+    return MA_SUCCESS;
+}
+
 MANET_API ma_result manet_engine_set_listener_direction(manet_engine* handle, ma_uint32 index, float x, float y, float z)
 {
     if (manet_validate_engine(handle) != MA_SUCCESS) {
@@ -267,6 +361,20 @@ MANET_API ma_result manet_engine_set_listener_direction(manet_engine* handle, ma
     }
 
     ma_engine_listener_set_direction(&handle->engine, index, x, y, z);
+    return MA_SUCCESS;
+}
+
+MANET_API ma_result manet_engine_get_listener_direction(manet_engine* handle, ma_uint32 index, float* x, float* y, float* z)
+{
+    if (manet_validate_engine(handle) != MA_SUCCESS || x == NULL || y == NULL || z == NULL) {
+        return MA_INVALID_OPERATION;
+    }
+
+    ma_vec3f direction = ma_engine_listener_get_direction(&handle->engine, index);
+    *x = direction.x;
+    *y = direction.y;
+    *z = direction.z;
+
     return MA_SUCCESS;
 }
 
@@ -280,6 +388,20 @@ MANET_API ma_result manet_engine_set_listener_world_up(manet_engine* handle, ma_
     return MA_SUCCESS;
 }
 
+MANET_API ma_result manet_engine_get_listener_world_up(manet_engine* handle, ma_uint32 index, float* x, float* y, float* z)
+{
+    if (manet_validate_engine(handle) != MA_SUCCESS || x == NULL || y == NULL || z == NULL) {
+        return MA_INVALID_OPERATION;
+    }
+
+    ma_vec3f up = ma_engine_listener_get_world_up(&handle->engine, index);
+    *x = up.x;
+    *y = up.y;
+    *z = up.z;
+
+    return MA_SUCCESS;
+}
+
 MANET_API ma_result manet_engine_set_listener_velocity(manet_engine* handle, ma_uint32 index, float x, float y, float z)
 {
     if (manet_validate_engine(handle) != MA_SUCCESS) {
@@ -288,6 +410,59 @@ MANET_API ma_result manet_engine_set_listener_velocity(manet_engine* handle, ma_
 
     ma_engine_listener_set_velocity(&handle->engine, index, x, y, z);
     return MA_SUCCESS;
+}
+
+MANET_API ma_result manet_engine_get_listener_velocity(manet_engine* handle, ma_uint32 index, float* x, float* y, float* z)
+{
+    if (manet_validate_engine(handle) != MA_SUCCESS || x == NULL || y == NULL || z == NULL) {
+        return MA_INVALID_OPERATION;
+    }
+
+    ma_vec3f velocity = ma_engine_listener_get_velocity(&handle->engine, index);
+    *x = velocity.x;
+    *y = velocity.y;
+    *z = velocity.z;
+
+    return MA_SUCCESS;
+}
+
+MANET_API ma_result manet_engine_set_listener_cone(manet_engine* handle, ma_uint32 index, float innerAngleInRadians, float outerAngleInRadians, float outerGain)
+{
+    if (manet_validate_engine(handle) != MA_SUCCESS) {
+        return MA_INVALID_OPERATION;
+    }
+
+    ma_engine_listener_set_cone(&handle->engine, index, innerAngleInRadians, outerAngleInRadians, outerGain);
+    return MA_SUCCESS;
+}
+
+MANET_API ma_result manet_engine_get_listener_cone(manet_engine* handle, ma_uint32 index, float* innerAngleInRadians, float* outerAngleInRadians, float* outerGain)
+{
+    if (manet_validate_engine(handle) != MA_SUCCESS || innerAngleInRadians == NULL || outerAngleInRadians == NULL || outerGain == NULL) {
+        return MA_INVALID_OPERATION;
+    }
+
+    ma_engine_listener_get_cone(&handle->engine, index, innerAngleInRadians, outerAngleInRadians, outerGain);
+    return MA_SUCCESS;
+}
+
+MANET_API ma_result manet_engine_set_listener_enabled(manet_engine* handle, ma_uint32 index, ma_bool32 isEnabled)
+{
+    if (manet_validate_engine(handle) != MA_SUCCESS) {
+        return MA_INVALID_OPERATION;
+    }
+
+    ma_engine_listener_set_enabled(&handle->engine, index, isEnabled);
+    return MA_SUCCESS;
+}
+
+MANET_API ma_bool32 manet_engine_is_listener_enabled(manet_engine* handle, ma_uint32 index)
+{
+    if (manet_validate_engine(handle) != MA_SUCCESS) {
+        return MA_FALSE;
+    }
+
+    return ma_engine_listener_is_enabled(&handle->engine, index);
 }
 
 MANET_API manet_engine* manet_engine_create_with_options(

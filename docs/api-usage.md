@@ -160,3 +160,30 @@ capture.Start();
 
 ```powershell
 pwsh dotnet run --project samples/MiniaudioNet.Sample.DeviceIO -- --file ./bgm.flac --monitor --backend Wasapi
+## エンジン制御の基本
+`MiniaudioEngineOptions.NoAutoStart` を `true` に設定して生成すると、`MiniaudioEngine.Start()` / `Stop()` でエンジン全体の再生状態を明示的に切り替えられます。`SetTimeInFrames()` や `SetTime()` を使うとグローバルタイムを任意の位置に移動でき、`GetAbsoluteTimeInFrames()` と組み合わせれば複数サウンドの同時再生を簡単にスケジュールできます。`Time` プロパティは現在のエンジン時間を `TimeSpan` で、`GainDb` プロパティはマスターゲインを dB で取得できます。
+
+```csharp
+using var engine = MiniaudioEngine.Create(new MiniaudioEngineOptions { NoAutoStart = true });
+engine.SetTime(TimeSpan.Zero);
+engine.GainDb = -3.5f;
+engine.Start();
+
+const uint listenerIndex = 0;
+engine.SetListenerPosition(listenerIndex, new Vector3(0f, 0f, -2.5f));
+engine.SetListenerDirection(listenerIndex, new Vector3(0f, 0f, -1f));
+engine.SetListenerCone(listenerIndex, new MiniaudioEngine.ListenerCone(
+    innerAngleRadians: MathF.PI / 4f,
+    outerAngleRadians: MathF.PI / 2f,
+    outerGain: 0.2f));
+
+var scheduleAt = engine.GetAbsoluteTimeInFrames(TimeSpan.FromMilliseconds(250));
+using var sound = engine.CreateSound("fx.wav");
+sound.ScheduleStart(scheduleAt);
+sound.Start();
+```
+
+`GetListenerPosition()` / `GetListenerDirection()` / `GetListenerWorldUp()` でリスナーの姿勢を確認し、`SetListenerEnabled()` や `FindClosestListener()` を組み合わせると 3D ミキシングのデバッグに役立ちます。
+
+### EngineControl サンプル
+`samples/MiniaudioNet.Sample.EngineControl` では上記の API を使った CLI を収録しています。NoAutoStart でエンジンを初期化し、`--delay-ms` で再生タイミングをスケジュール、`--gain-db` や `--listener-z` でリスナー設定を変更する例を確認できます。

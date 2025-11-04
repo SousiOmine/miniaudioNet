@@ -148,6 +148,9 @@ internal static partial class NativeMethods
     [LibraryImport(LibraryName, EntryPoint = "manet_resource_manager_destroy")]
     internal static partial void ResourceManagerDestroy(IntPtr handle);
 
+    [LibraryImport(LibraryName, EntryPoint = "manet_engine_start")]
+    internal static partial int EngineStart(EngineHandle handle);
+
     [LibraryImport(LibraryName, EntryPoint = "manet_engine_stop")]
     internal static partial int EngineStop(EngineHandle handle);
 
@@ -157,26 +160,74 @@ internal static partial class NativeMethods
     [LibraryImport(LibraryName, EntryPoint = "manet_engine_get_volume")]
     internal static partial float EngineGetVolume(EngineHandle handle);
 
+    [LibraryImport(LibraryName, EntryPoint = "manet_engine_set_gain_db")]
+    internal static partial int EngineSetGainDb(EngineHandle handle, float gainDb);
+
+    [LibraryImport(LibraryName, EntryPoint = "manet_engine_get_gain_db")]
+    internal static partial float EngineGetGainDb(EngineHandle handle);
+
     [LibraryImport(LibraryName, EntryPoint = "manet_engine_play_sound", StringMarshalling = StringMarshalling.Utf8)]
     internal static partial int EnginePlaySound(EngineHandle handle, string path);
 
     [LibraryImport(LibraryName, EntryPoint = "manet_engine_set_listener_position")]
     internal static partial int EngineSetListenerPosition(EngineHandle handle, uint index, float x, float y, float z);
 
+    [LibraryImport(LibraryName, EntryPoint = "manet_engine_get_listener_position")]
+    internal static partial int EngineGetListenerPosition(EngineHandle handle, uint index, out float x, out float y, out float z);
+
     [LibraryImport(LibraryName, EntryPoint = "manet_engine_set_listener_direction")]
     internal static partial int EngineSetListenerDirection(EngineHandle handle, uint index, float x, float y, float z);
+
+    [LibraryImport(LibraryName, EntryPoint = "manet_engine_get_listener_direction")]
+    internal static partial int EngineGetListenerDirection(EngineHandle handle, uint index, out float x, out float y, out float z);
 
     [LibraryImport(LibraryName, EntryPoint = "manet_engine_set_listener_world_up")]
     internal static partial int EngineSetListenerWorldUp(EngineHandle handle, uint index, float x, float y, float z);
 
+    [LibraryImport(LibraryName, EntryPoint = "manet_engine_get_listener_world_up")]
+    internal static partial int EngineGetListenerWorldUp(EngineHandle handle, uint index, out float x, out float y, out float z);
+
     [LibraryImport(LibraryName, EntryPoint = "manet_engine_set_listener_velocity")]
     internal static partial int EngineSetListenerVelocity(EngineHandle handle, uint index, float x, float y, float z);
+
+    [LibraryImport(LibraryName, EntryPoint = "manet_engine_get_listener_velocity")]
+    internal static partial int EngineGetListenerVelocity(EngineHandle handle, uint index, out float x, out float y, out float z);
+
+    [LibraryImport(LibraryName, EntryPoint = "manet_engine_set_listener_cone")]
+    internal static partial int EngineSetListenerCone(EngineHandle handle, uint index, float innerAngleInRadians, float outerAngleInRadians, float outerGain);
+
+    [LibraryImport(LibraryName, EntryPoint = "manet_engine_get_listener_cone")]
+    internal static partial int EngineGetListenerCone(EngineHandle handle, uint index, out float innerAngleInRadians, out float outerAngleInRadians, out float outerGain);
+
+    [LibraryImport(LibraryName, EntryPoint = "manet_engine_set_listener_enabled")]
+    internal static partial int EngineSetListenerEnabled(EngineHandle handle, uint index, int isEnabled);
+
+    [LibraryImport(LibraryName, EntryPoint = "manet_engine_is_listener_enabled")]
+    internal static partial int EngineIsListenerEnabled(EngineHandle handle, uint index);
 
     [LibraryImport(LibraryName, EntryPoint = "manet_engine_get_sample_rate")]
     internal static partial uint EngineGetSampleRate(EngineHandle handle);
 
+    [LibraryImport(LibraryName, EntryPoint = "manet_engine_get_channels")]
+    internal static partial uint EngineGetChannelCount(EngineHandle handle);
+
     [LibraryImport(LibraryName, EntryPoint = "manet_engine_get_time_in_pcm_frames")]
     internal static partial ulong EngineGetTimeInPcmFrames(EngineHandle handle);
+
+    [LibraryImport(LibraryName, EntryPoint = "manet_engine_get_time_in_milliseconds")]
+    internal static partial ulong EngineGetTimeInMilliseconds(EngineHandle handle);
+
+    [LibraryImport(LibraryName, EntryPoint = "manet_engine_set_time_in_pcm_frames")]
+    internal static partial int EngineSetTimeInPcmFrames(EngineHandle handle, ulong globalTime);
+
+    [LibraryImport(LibraryName, EntryPoint = "manet_engine_set_time_in_milliseconds")]
+    internal static partial int EngineSetTimeInMilliseconds(EngineHandle handle, ulong globalTime);
+
+    [LibraryImport(LibraryName, EntryPoint = "manet_engine_get_listener_count")]
+    internal static partial uint EngineGetListenerCount(EngineHandle handle);
+
+    [LibraryImport(LibraryName, EntryPoint = "manet_engine_find_closest_listener")]
+    internal static partial uint EngineFindClosestListener(EngineHandle handle, float x, float y, float z);
 
     internal static SoundHandle SoundCreateFromFile(EngineHandle engine, string path, uint flags)
     {
