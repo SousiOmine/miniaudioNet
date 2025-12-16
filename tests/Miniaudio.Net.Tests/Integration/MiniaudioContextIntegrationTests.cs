@@ -2,6 +2,7 @@ using NUnit.Framework;
 using Miniaudio.Net;
 using System;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 
 namespace Miniaudio.Net.Tests.Integration;
 
@@ -13,6 +14,53 @@ namespace Miniaudio.Net.Tests.Integration;
 [Category("Integration")]
 public class MiniaudioContextIntegrationTests
 {
+    /// <summary>
+    /// 現在のプラットフォームで利用可能なバックエンドを取得
+    /// </summary>
+    private static MiniaudioBackend[] GetPlatformBackends()
+    {
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            return new[] { MiniaudioBackend.Wasapi, MiniaudioBackend.DSound };
+        }
+        else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        {
+            return new[] { MiniaudioBackend.CoreAudio };
+        }
+        else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+        {
+            return new[] { MiniaudioBackend.PulseAudio, MiniaudioBackend.Alsa };
+        }
+        else
+        {
+            return Array.Empty<MiniaudioBackend>();
+        }
+    }
+
+    /// <summary>
+    /// 現在のプラットフォームで利用可能な単一のバックエンドを取得
+    /// </summary>
+    private static MiniaudioBackend GetPrimaryPlatformBackend()
+    {
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            return MiniaudioBackend.Wasapi;
+        }
+        else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        {
+            return MiniaudioBackend.CoreAudio;
+        }
+        else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+        {
+            return MiniaudioBackend.PulseAudio;
+        }
+        else
+        {
+            // フォールバック: Nullバックエンドを使用
+            return MiniaudioBackend.Null;
+        }
+    }
+
     [Test]
     public void Create_DefaultBackends_ReturnsValidContext()
     {
@@ -25,12 +73,17 @@ public class MiniaudioContextIntegrationTests
     [Test]
     public void Create_WithPreferredBackends_ReturnsValidContext()
     {
-        var backends = new List<MiniaudioBackend> { MiniaudioBackend.Wasapi, MiniaudioBackend.DSound };
+        var backends = GetPlatformBackends();
+        // プラットフォーム固有のバックエンドが取得できない場合はスキップ
+        if (backends.Length == 0)
+        {
+            Assert.Ignore("No platform-specific backends available for this OS.");
+        }
 
         using var context = MiniaudioContext.Create(backends);
 
         Assert.That(context, Is.Not.Null);
-        Assert.That(context.PreferredBackends, Has.Count.EqualTo(2));
+        Assert.That(context.PreferredBackends, Has.Count.EqualTo(backends.Length));
     }
 
     [Test]
@@ -79,7 +132,8 @@ public class MiniaudioContextIntegrationTests
     [Test]
     public void Create_DuplicateBackends_RemovesDuplicates()
     {
-        var backends = new List<MiniaudioBackend> { MiniaudioBackend.Wasapi, MiniaudioBackend.Wasapi };
+        var backend = GetPrimaryPlatformBackend();
+        var backends = new List<MiniaudioBackend> { backend, backend };
 
         using var context = MiniaudioContext.Create(backends);
 
