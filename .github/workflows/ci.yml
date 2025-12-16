@@ -33,7 +33,7 @@ jobs:
             preset: linux-x64
             rid: linux-x64
             shell: bash
-          - os: macos-13
+          - os: macos-14
             preset: macos-x64
             rid: osx-x64
             shell: bash
