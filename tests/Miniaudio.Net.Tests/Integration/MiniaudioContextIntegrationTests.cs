@@ -132,8 +132,7 @@ public class MiniaudioContextIntegrationTests
     [Test]
     public void Create_DuplicateBackends_RemovesDuplicates()
     {
-        var backend = GetPrimaryPlatformBackend();
-        var backends = new List<MiniaudioBackend> { backend, backend };
+        var backends = new List<MiniaudioBackend> { MiniaudioBackend.Null, MiniaudioBackend.Null };
 
         using var context = MiniaudioContext.Create(backends);
 
