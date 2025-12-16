@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <NativeArtifactsRoot Condition="'$(NativeArtifactsRoot)' == ''">$(RepositoryRoot)artifacts/native</NativeArtifactsRoot>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.0" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
+    <PackageReference Include="NUnit" Version="3.14.0" />
+    <PackageReference Include="NUnit.Analyzers" Version="3.9.0" />
+    <PackageReference Include="NUnit3TestAdapter" Version="4.5.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="NUnit.Framework" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Miniaudio.Net\Miniaudio.Net.csproj" />
+  </ItemGroup>
+
+  <!-- Copy native binaries for test execution -->
+  <ItemGroup Condition="Exists('$(NativeArtifactsRoot)')">
+    <NativeTestBinary Include="$(NativeArtifactsRoot)/**/*.*" />
+  </ItemGroup>
+
+  <Target Name="CopyNativeBinariesForTest"
+          Condition="'@(NativeTestBinary)' != ''"
+          AfterTargets="Build">
+    <Message Importance="High" Text="Copying native libraries to test output $(OutDir)runtimes/..." />
+    <!-- Copy to runtimes/<rid>/native/ for standard resolution -->
+    <Copy SourceFiles="@(NativeTestBinary)"
+          DestinationFiles="@(NativeTestBinary->'$(OutDir)runtimes/$([System.String]::Copy('%(RecursiveDir)').Replace('\', '/'))%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+    <!-- Also copy DLLs directly to output directory for test runners that don't resolve runtimes -->
+    <Copy SourceFiles="@(NativeTestBinary)"
+          Condition="'%(Extension)' == '.dll' Or '%(Extension)' == '.so' Or '%(Extension)' == '.dylib'"
+          DestinationFolder="$(OutDir)"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+</Project>

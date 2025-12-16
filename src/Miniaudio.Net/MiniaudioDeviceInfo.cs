@@ -6,6 +6,10 @@ public sealed record MiniaudioDeviceInfo(
     bool IsDefault,
     string DeviceId)
 {
+    public bool IsCapture => Kind == MiniaudioDeviceKind.Capture;
+
+    public bool IsPlayback => Kind == MiniaudioDeviceKind.Playback;
+
     public override string ToString()
         => $"{Name} {(IsDefault ? "[default]" : string.Empty)}".Trim();
 }

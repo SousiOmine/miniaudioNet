@@ -66,10 +66,45 @@ jobs:
           if-no-files-found: error
           path: artifacts/native/${{ matrix.rid }}
 
+  test:
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    needs: native
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            rid: win-x64
+          - os: ubuntu-latest
+            rid: linux-x64
+          - os: macos-latest
+            rid: osx-arm64
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-${{ matrix.rid }}
+          path: artifacts/native/${{ matrix.rid }}
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore & build
+        run: dotnet build miniaudioNet.sln -c Release
+
+      - name: Run unit tests
+        run: dotnet test tests/Miniaudio.Net.Tests -c Release --no-build --verbosity normal --filter "Category!=Integration"
+
+      - name: Run integration tests
+        run: dotnet test tests/Miniaudio.Net.Tests -c Release --no-build --verbosity normal --filter "Category=Integration"
+
   pack:
     name: pack
     runs-on: ubuntu-latest
-    needs: native
+    needs: [native, test]
     steps:
       - uses: actions/checkout@v4
 
@@ -85,6 +120,9 @@ jobs:
 
       - name: Restore & build
         run: dotnet build miniaudioNet.sln -c Release
+
+      - name: Run all tests
+        run: dotnet test tests/Miniaudio.Net.Tests -c Release --no-build --verbosity normal
 
       - name: Pack
         run: dotnet pack src/Miniaudio.Net/Miniaudio.Net.csproj -c Release -o artifacts/packages
