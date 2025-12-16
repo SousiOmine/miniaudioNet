@@ -1,10 +1,60 @@
 ﻿# miniaudioNet
 
-miniaudioNetは、C言語で書かれたオーディオライブラリである[miniaudio](https://github.com/mackron/miniaudio)を.NETから安全に扱うためラッパーライブラリです。
+[![NuGet](https://img.shields.io/nuget/v/Miniaudio.Net.svg)](https://www.nuget.org/packages/Miniaudio.Net/)
+[![NuGet Downloads](https://img.shields.io/nuget/dt/Miniaudio.Net.svg)](https://www.nuget.org/packages/Miniaudio.Net/)
+[![CI](https://github.com/SousiOmine/miniaudioNet/actions/workflows/ci.yml/badge.svg)](https://github.com/SousiOmine/miniaudioNet/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-現状はCodexまかせで開発されています。
+miniaudioNetは、C言語で書かれたオーディオライブラリである[miniaudio](https://github.com/mackron/miniaudio)を.NETから安全に扱うためのラッパーライブラリです。
 
-使用は推奨しません。
+Windows、Linux、macOS（x64/ARM64）に対応しており、NuGetパッケージにはすべてのプラットフォーム向けのネイティブバイナリが含まれています。
+
+## インストール
+
+### NuGet パッケージマネージャー
+
+```powershell
+Install-Package Miniaudio.Net
+```
+
+### .NET CLI
+
+```bash
+dotnet add package Miniaudio.Net
+```
+
+### PackageReference
+
+```xml
+<PackageReference Include="Miniaudio.Net" Version="0.1.0" />
+```
+
+## クイックスタート
+
+```csharp
+using Miniaudio.Net;
+
+// オーディオファイルを再生
+using var context = new MiniaudioContext();
+using var sound = context.CreateSound("path/to/audio.mp3");
+
+sound.Start();
+
+Console.WriteLine("再生中... Enterキーで終了");
+Console.ReadLine();
+```
+
+## 対応プラットフォーム
+
+| プラットフォーム | アーキテクチャ |
+|------------------|----------------|
+| Windows          | x64, ARM64     |
+| Linux            | x64, ARM64     |
+| macOS            | x64, ARM64     |
+
+## 開発状況
+
+> **注意**: 現状はCodexまかせで開発されています。
 
 ## ディレクトリ構成
 
